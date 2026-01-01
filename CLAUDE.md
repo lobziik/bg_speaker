@@ -1,0 +1,102 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+BG3 Twitch Narrator Bot - A Twitch Channel Points integration that reads chat messages in Baldur's Gate 3 narrator voice style, with multilingual subtitles overlay for OBS. Transforms casual chat into dramatic D&D narrator prose using LLM, then synthesizes speech with TTS.
+
+**Core Flow:** Twitch Channel Points Redemption → LLM (D&D formatting) → Translation (if needed) → TTS (Piper) → WebSocket → OBS Browser Source (audio + subtitles)
+
+## Build & Development Commands
+
+```bash
+# Install dependencies
+pip install -e .
+
+# Install with dev tools
+pip install -e ".[dev]"
+
+# Install with ElevenLabs support
+pip install -e ".[elevenlabs]"
+
+# Run the application
+python -m src.main
+
+# Run tests
+pytest
+
+# Run single test file
+pytest tests/test_providers/test_llm.py
+
+# Run with coverage
+pytest --cov=src --cov-report=term-missing
+
+# Type checking
+mypy src
+
+# Linting
+ruff check .
+
+# Auto-fix lint issues
+ruff check --fix .
+
+# Format code
+ruff format .
+```
+
+## Architecture
+
+### Provider Pattern
+All external services (LLM, TTS, Translation) use Protocol-based abstraction in `src/providers/`:
+- `LLMProvider` protocol: Groq (MVP), OpenAI, Anthropic, OpenRouter, Ollama
+- `TTSProvider` protocol: Piper (MVP, MIT licensed, CPU-friendly), ElevenLabs (premium)
+- `TranslateProvider` protocol: LLM-based (MVP), DeepL, Google, Argos
+
+Providers implement `get_settings_schema()` returning JSON Schema for dynamic Web UI form generation.
+
+### Service Layer (`src/services/`)
+- `twitch/eventsub.py`: TwitchIO 3.x EventSub WebSocket for Channel Points redemptions
+- `twitch/rewards.py`: Manages Channel Points reward lifecycle (create/pause/fulfill/cancel)
+- `pipeline.py`: Orchestrates LLM → TTS flow
+- `queue.py`: Message queue with priority and rate limiting
+- `rate_limiter.py`: Global TTS rate limit + per-user cooldowns
+
+### Data Layer
+- SQLite database at `data/narrator.db`
+- Migrations in `migrations/` folder (auto-applied on startup)
+- `src/db/repositories/`: Typed repository pattern for settings, providers, logs
+
+### Web Components
+- `src/api/`: FastAPI routes (JSON API + WebSocket)
+- `src/views/`: HTMX endpoints returning HTML partials
+- `src/templates/`: Jinja2 templates with HTMX
+- `overlay/`: OBS Browser Source (HTML/CSS/JS) connecting via WebSocket
+
+## Type Safety Requirements
+
+- Pydantic v2 with strict mode (`StrictModel` base class in `src/core/types.py`)
+- `@runtime_checkable` Protocol classes for providers
+- TypedDict for WebSocket message types
+- No `Any` types - explicit types everywhere
+- mypy strict mode enforced in CI
+
+## Key Design Decisions
+
+- **Piper TTS for MVP**: CPU-friendly (3-11x realtime), MIT licensed, no GPU required. ElevenLabs optional for premium voices.
+- **Single OBS Source**: Audio + subtitles delivered via one WebSocket connection
+- **Language Independence**: `source_lang`, `narrator_lang`, `subtitle_lang` are separately configurable
+- **Translation Skip**: When `source_lang == narrator_lang`, translation step is bypassed
+- **SecretStr**: All API keys use Pydantic SecretStr (env vars only, never in DB)
+
+## Configuration
+
+- **Secrets**: Environment variables only (`.env` file, never committed)
+- **Static config**: `config/default.yaml` - safe to commit
+- **Dynamic settings**: SQLite database - modified via Web UI
+
+Required env vars: `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_CHANNEL`, `SECRET_KEY`, plus at least one LLM API key.
+
+## Testing
+
+Tests in `tests/` directory mirror `src/` structure. Use `pytest-asyncio` for async tests. Coverage target: 80%.
