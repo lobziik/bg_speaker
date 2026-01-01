@@ -11,38 +11,41 @@ BG3 Twitch Narrator Bot - A Twitch Channel Points integration that reads chat me
 ## Build & Development Commands
 
 ```bash
-# Install dependencies
-pip install -e .
+# Install dependencies (uses uv)
+uv sync
 
 # Install with dev tools
-pip install -e ".[dev]"
+uv sync --extra dev
 
 # Install with ElevenLabs support
-pip install -e ".[elevenlabs]"
+uv sync --extra elevenlabs
 
 # Run the application
-python -m src.main
+uv run python -m src.main
+
+# Run CLI with arguments
+uv run python -m src.main "Hello everyone!" --user DragonSlayer --style whisper
 
 # Run tests
-pytest
+uv run pytest
 
 # Run single test file
-pytest tests/test_providers/test_llm.py
+uv run pytest tests/test_providers/test_llm.py
 
 # Run with coverage
-pytest --cov=src --cov-report=term-missing
+uv run pytest --cov=src --cov-report=term-missing
 
 # Type checking
-mypy src
+uv run mypy src
 
 # Linting
-ruff check .
+uv run ruff check .
 
 # Auto-fix lint issues
-ruff check --fix .
+uv run ruff check --fix .
 
 # Format code
-ruff format .
+uv run ruff format .
 ```
 
 ## Architecture
