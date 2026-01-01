@@ -81,6 +81,10 @@ Providers implement `get_settings_schema()` returning JSON Schema for dynamic We
 - No `Any` types - explicit types everywhere
 - mypy strict mode enforced in CI
 
+## Fail fast and LOUD
+Never do `except Exception:`. Always narrow down the exception type and handle it properly.
+Better fail than swallow an error.
+
 ## Key Design Decisions
 
 - **Piper TTS for MVP**: CPU-friendly (3-11x realtime), MIT licensed, no GPU required. ElevenLabs optional for premium voices.
