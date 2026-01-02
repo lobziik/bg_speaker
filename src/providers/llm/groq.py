@@ -96,20 +96,40 @@ class GroqLLMProvider:
         Returns:
             LLMResponse with formatted text
         """
+        logger.debug(
+            "groq_generation_start",
+            user=user,
+            model=self._model,
+            style=style,
+            input_length=len(message),
+        )
+
         user_content = f"[{user}]: {message}"
 
         if style != "default":
             user_content = f"[Style: {style}] {user_content}"
 
-        response = await self._client.chat.completions.create(
-            model=self._model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=self._temperature,
-            max_tokens=self._max_tokens,
-        )
+        try:
+            response = await self._client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=self._temperature,
+                max_tokens=self._max_tokens,
+            )
+        except APIConnectionError as e:
+            logger.error("groq_connection_error", user=user, error=str(e))
+            raise
+        except APIStatusError as e:
+            logger.error(
+                "groq_api_error",
+                user=user,
+                status_code=e.status_code,
+                error=str(e),
+            )
+            raise
 
         text = response.choices[0].message.content or ""
 
@@ -138,25 +158,49 @@ class GroqLLMProvider:
         Yields:
             Text chunks as they're generated
         """
+        logger.debug(
+            "groq_stream_start",
+            user=user,
+            model=self._model,
+            style=style,
+            input_length=len(message),
+        )
+
         user_content = f"[{user}]: {message}"
 
         if style != "default":
             user_content = f"[Style: {style}] {user_content}"
 
-        stream = await self._client.chat.completions.create(
-            model=self._model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=self._temperature,
-            max_tokens=self._max_tokens,
-            stream=True,
-        )
+        try:
+            stream = await self._client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=self._temperature,
+                max_tokens=self._max_tokens,
+                stream=True,
+            )
+        except APIConnectionError as e:
+            logger.error("groq_stream_connection_error", user=user, error=str(e))
+            raise
+        except APIStatusError as e:
+            logger.error(
+                "groq_stream_api_error",
+                user=user,
+                status_code=e.status_code,
+                error=str(e),
+            )
+            raise
 
+        chunk_count = 0
         async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
+                chunk_count += 1
                 yield chunk.choices[0].delta.content
+
+        logger.debug("groq_stream_complete", user=user, chunk_count=chunk_count)
 
     async def list_models(self) -> list[Model]:
         """List available models."""

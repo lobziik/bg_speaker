@@ -74,6 +74,9 @@ class TTSProvider(Protocol):
     ) -> AsyncIterator[bytes]:
         """Streaming audio synthesis.
 
+        Note: Implementations should be async generators (async def with yield).
+        The return type is AsyncIterator to match async generator behavior.
+
         Yields:
             Audio chunks as they're generated
         """

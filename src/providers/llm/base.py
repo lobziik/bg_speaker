@@ -65,6 +65,9 @@ class LLMProvider(Protocol):
     ) -> AsyncIterator[str]:
         """Streaming generation (optional).
 
+        Note: Implementations should be async generators (async def with yield).
+        The return type is AsyncIterator to match async generator behavior.
+
         Yields:
             Text chunks as they're generated
         """

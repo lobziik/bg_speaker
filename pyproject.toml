@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "BG3 Twitch Narrator Bot - Reads chat in D&D narrator style with TTS"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.12"
+requires-python = "==3.12.*"
 dependencies = [
     # Web framework
     "fastapi>=0.115.0",
@@ -31,8 +31,8 @@ dependencies = [
 
     # LLM clients
     "groq>=0.11.0",
-    "openai>=1.50.0",
-    "anthropic>=0.34.0",
+#    "openai>=1.50.0",
+#    "anthropic>=0.34.0",
 
     # Utilities
     "structlog>=24.0.0",

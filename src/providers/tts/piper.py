@@ -2,9 +2,11 @@
 
 import asyncio
 import io
+import sys
 import wave
 from collections.abc import AsyncIterator
 from pathlib import Path
+from urllib.request import urlopen
 
 import structlog
 
@@ -12,6 +14,190 @@ from src.core.types import StrictModel
 from src.providers.tts.base import TTSProvider, TTSSettings, Voice
 
 logger = structlog.get_logger()
+
+
+# Piper voice model download configuration
+PIPER_VOICES_BASE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
+
+
+def get_piper_cache_dir() -> Path:
+    """Get the Piper model cache directory.
+
+    Returns:
+        Path to cache directory (created if doesn't exist)
+    """
+    # Use standard cache location
+    cache_dir = Path.home() / ".local" / "share" / "piper-tts"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def parse_voice_name(voice: str) -> dict[str, str]:
+    """Parse Piper voice name into components.
+
+    Args:
+        voice: Voice name like "en_US-lessac-medium"
+
+    Returns:
+        Dictionary with lang_family, lang_code, voice_name, quality
+
+    Raises:
+        ValueError: If voice name format is invalid
+    """
+    parts = voice.split("-")
+    if len(parts) != 3:
+        raise ValueError(
+            f"Invalid voice name format: '{voice}'. Expected format: 'lang_code-name-quality' "
+            f"(e.g., 'en_US-lessac-medium')"
+        )
+
+    lang_code = parts[0]  # e.g., "en_US"
+    voice_name = parts[1]  # e.g., "lessac"
+    quality = parts[2]  # e.g., "medium"
+
+    if "_" not in lang_code:
+        raise ValueError(
+            f"Invalid language code format: '{lang_code}'. Expected format: 'xx_XX' "
+            f"(e.g., 'en_US')"
+        )
+
+    lang_family = lang_code.split("_")[0]  # e.g., "en"
+
+    return {
+        "lang_family": lang_family,
+        "lang_code": lang_code,
+        "voice_name": voice_name,
+        "quality": quality,
+    }
+
+
+def get_voice_urls(voice: str) -> tuple[str, str]:
+    """Get download URLs for voice model and config.
+
+    Args:
+        voice: Voice name like "en_US-lessac-medium"
+
+    Returns:
+        Tuple of (model_url, config_url)
+    """
+    parts = parse_voice_name(voice)
+    base_path = (
+        f"{PIPER_VOICES_BASE_URL}/{parts['lang_family']}/{parts['lang_code']}/"
+        f"{parts['voice_name']}/{parts['quality']}"
+    )
+    filename = f"{parts['lang_code']}-{parts['voice_name']}-{parts['quality']}"
+
+    model_url = f"{base_path}/{filename}.onnx?download=true"
+    config_url = f"{base_path}/{filename}.onnx.json?download=true"
+
+    return model_url, config_url
+
+
+def download_with_progress(url: str, dest_path: Path, description: str) -> None:
+    """Download a file with progress output.
+
+    Args:
+        url: URL to download
+        dest_path: Destination file path
+        description: Description for progress display
+    """
+    with urlopen(url) as response:
+        total_size = response.headers.get("Content-Length")
+        total_size_int = int(total_size) if total_size else None
+
+        if total_size_int:
+            total_mb = total_size_int / (1024 * 1024)
+            print(f"Downloading {description} ({total_mb:.1f} MB)...")
+        else:
+            print(f"Downloading {description}...")
+
+        downloaded = 0
+        chunk_size = 8192
+        last_percent = -1
+
+        with dest_path.open("wb") as f:
+            while True:
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+
+                if total_size_int:
+                    percent = int((downloaded / total_size_int) * 100)
+                    if percent != last_percent and percent % 10 == 0:
+                        downloaded_mb = downloaded / (1024 * 1024)
+                        sys.stdout.write(f"\r  Progress: {percent}% ({downloaded_mb:.1f} MB)")
+                        sys.stdout.flush()
+                        last_percent = percent
+
+        if total_size_int:
+            print()  # Newline after progress
+
+
+def ensure_voice_downloaded(voice: str) -> Path:
+    """Ensure voice model is downloaded, downloading if necessary.
+
+    Args:
+        voice: Voice name like "en_US-lessac-medium"
+
+    Returns:
+        Path to the downloaded .onnx model file
+
+    Raises:
+        ValueError: If voice name format is invalid
+        ConnectionError: If download fails
+    """
+    cache_dir = get_piper_cache_dir()
+    parts = parse_voice_name(voice)
+    filename = f"{parts['lang_code']}-{parts['voice_name']}-{parts['quality']}"
+
+    model_path = cache_dir / f"{filename}.onnx"
+    config_path = cache_dir / f"{filename}.onnx.json"
+
+    # Check if already downloaded
+    if model_path.exists() and config_path.exists():
+        logger.info(
+            "piper_voice_cached",
+            voice=voice,
+            model_path=str(model_path),
+        )
+        return model_path
+
+    # Download with progress
+    logger.info(
+        "piper_voice_download_starting",
+        voice=voice,
+        cache_dir=str(cache_dir),
+    )
+    print(f"\nFirst-time setup: downloading Piper voice model '{voice}'")
+    print(f"Models will be stored in: {cache_dir}\n")
+
+    model_url, config_url = get_voice_urls(voice)
+
+    try:
+        # Download config first (small file)
+        download_with_progress(config_url, config_path, f"{filename}.onnx.json")
+
+        # Download model (large file)
+        download_with_progress(model_url, model_path, f"{filename}.onnx")
+
+    except Exception as e:
+        # Clean up partial downloads
+        if config_path.exists():
+            config_path.unlink()
+        if model_path.exists():
+            model_path.unlink()
+        raise ConnectionError(f"Failed to download voice model '{voice}': {e}") from e
+
+    logger.info(
+        "piper_voice_downloaded",
+        voice=voice,
+        model_path=str(model_path),
+    )
+    print(f"\nVoice model downloaded successfully to: {model_path}\n")
+
+    return model_path
 
 
 class PiperSettings(StrictModel):
@@ -140,10 +326,29 @@ class PiperTTSProvider:
         from piper import PiperVoice
 
         if self._settings.model_path:
-            return PiperVoice.load(str(self._settings.model_path))
+            model_path = self._settings.model_path
+            logger.info(
+                "piper_voice_loading",
+                voice=self._settings.voice,
+                model_path=str(model_path),
+            )
         else:
-            # Auto-download from Hugging Face
-            return PiperVoice.load(self._settings.voice)
+            # Ensure model is downloaded (with progress), then get the path
+            model_path = ensure_voice_downloaded(self._settings.voice)
+            logger.info(
+                "piper_voice_loading",
+                voice=self._settings.voice,
+                model_path=str(model_path),
+            )
+
+        voice = PiperVoice.load(str(model_path))
+
+        logger.info(
+            "piper_voice_loaded",
+            voice=self._settings.voice,
+            model_path=str(model_path),
+        )
+        return voice
 
     async def synthesize(
         self,
@@ -161,6 +366,12 @@ class PiperTTSProvider:
         Returns:
             WAV audio bytes
         """
+        logger.debug(
+            "piper_synthesis_start",
+            text_length=len(text),
+            voice=self._settings.voice,
+        )
+
         voice = await self._ensure_loaded()
 
         # Map generic settings to Piper-specific
@@ -169,9 +380,19 @@ class PiperTTSProvider:
             length_scale = 1.0 / settings.speed
 
         loop = asyncio.get_event_loop()
-        audio_bytes = await loop.run_in_executor(
-            None, lambda: self._synthesize_sync(voice, text, length_scale)
-        )
+        try:
+            audio_bytes = await loop.run_in_executor(
+                None, lambda: self._synthesize_sync(voice, text, length_scale)
+            )
+        except Exception as e:
+            logger.error(
+                "piper_synthesis_failed",
+                text_length=len(text),
+                voice=self._settings.voice,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise
 
         logger.debug(
             "piper_synthesis_complete",
@@ -200,20 +421,22 @@ class PiperTTSProvider:
         """
         # Type assertion for the voice object
         from piper import PiperVoice  # noqa: TC002
+        from piper.config import SynthesisConfig
 
         piper_voice: PiperVoice = voice  # type: ignore[assignment]
 
-        audio_stream = piper_voice.synthesize_stream_raw(
-            text,
+        # Create synthesis config
+        syn_config = SynthesisConfig(
             speaker_id=self._settings.speaker_id,
             length_scale=length_scale,
             noise_scale=self._settings.noise_scale,
-            noise_w=self._settings.noise_w,
+            noise_w_scale=self._settings.noise_w,
         )
 
+        # Synthesize and collect audio chunks
         audio_chunks: list[bytes] = []
-        for chunk in audio_stream:
-            audio_chunks.append(chunk)
+        for chunk in piper_voice.synthesize(text, syn_config):
+            audio_chunks.append(chunk.audio_int16_bytes)
 
         raw_audio = b"".join(audio_chunks)
 

@@ -2,8 +2,11 @@
 
 from pathlib import Path
 
+import structlog
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = structlog.get_logger()
 
 
 class EnvSettings(BaseSettings):
@@ -84,4 +87,10 @@ def get_env_settings() -> EnvSettings:
     global _env_settings
     if _env_settings is None:
         _env_settings = EnvSettings()
+        logger.info(
+            "env_settings_loaded",
+            available_llm_providers=_env_settings.get_available_llm_providers(),
+            available_tts_providers=_env_settings.get_available_tts_providers(),
+            has_twitch_config=bool(_env_settings.twitch_client_id),
+        )
     return _env_settings

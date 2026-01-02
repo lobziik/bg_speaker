@@ -122,6 +122,9 @@ async def run_pipeline(
 
 def main() -> None:
     """CLI entry point."""
+    # Immediate feedback before any processing
+    print("BG3 Narrator Bot - Starting...")
+
     parser = argparse.ArgumentParser(
         description="BG3 Narrator Bot - Convert text to narrated audio",
         formatter_class=argparse.RawDescriptionHelpFormatter,

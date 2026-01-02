@@ -96,6 +96,11 @@ class NarrationPipeline:
         )
 
         # Step 1: LLM formatting
+        logger.debug(
+            "pipeline_llm_start",
+            request_id=request_id,
+            llm_provider=self._llm.name,
+        )
         llm_start = time.monotonic()
         llm_response = await self._llm.generate(
             user=request.user,
@@ -115,9 +120,22 @@ class NarrationPipeline:
         )
 
         # Step 2: TTS synthesis
+        logger.debug(
+            "pipeline_tts_start",
+            request_id=request_id,
+            tts_provider=self._tts.name,
+            text_length=len(formatted_text),
+        )
         tts_start = time.monotonic()
         audio_data = await self._tts.synthesize(formatted_text)
         tts_latency_ms = int((time.monotonic() - tts_start) * 1000)
+
+        logger.debug(
+            "pipeline_tts_complete",
+            request_id=request_id,
+            audio_size=len(audio_data),
+            latency_ms=tts_latency_ms,
+        )
 
         total_latency_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -188,11 +206,22 @@ class NarrationPipeline:
         Returns:
             Dict with component health status
         """
+        logger.debug("pipeline_health_check_start")
+
         llm_ok = await self._llm.health_check()
         tts_ok = await self._tts.health_check()
 
-        return {
+        health = {
             "llm": llm_ok,
             "tts": tts_ok,
             "pipeline": llm_ok and tts_ok,
         }
+
+        logger.info(
+            "pipeline_health_check_complete",
+            llm_ok=llm_ok,
+            tts_ok=tts_ok,
+            pipeline_ok=health["pipeline"],
+        )
+
+        return health
