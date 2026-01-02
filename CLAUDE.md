@@ -20,11 +20,11 @@ uv sync --extra dev
 # Install with ElevenLabs support
 uv sync --extra elevenlabs
 
-# Run the application
-uv run python -m src.main
+# Start the web server (Twitch integration)
+uv run python -m src.main serve --port 8000
 
-# Run CLI with arguments
-uv run python -m src.main "Hello everyone!" --user DragonSlayer --style whisper
+# Test CLI pipeline
+uv run python -m src.main test "Hello everyone!" --user DragonSlayer --style whisper
 
 # Run tests
 uv run pytest

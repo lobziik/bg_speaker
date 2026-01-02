@@ -1,7 +1,8 @@
 """Main entry point for the narrator bot.
 
-Phase 1: CLI tool for testing LLM → TTS pipeline
-Later phases: Full web server with Twitch integration
+Supports two modes:
+- CLI: Test the LLM → TTS pipeline directly
+- Server: Run FastAPI server with Twitch integration
 """
 
 import argparse
@@ -10,6 +11,7 @@ import sys
 from pathlib import Path
 
 import structlog
+import uvicorn
 
 from src.config import get_env_settings
 from src.models.narration import NarrationRequest, NarratorStyle
@@ -120,34 +122,83 @@ async def run_pipeline(
     print(f"Total processing time: {metrics.total_latency_ms}ms")
 
 
+def run_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = False) -> None:
+    """Run the FastAPI server.
+
+    Args:
+        host: Host to bind to.
+        port: Port to bind to.
+        reload: Enable auto-reload for development.
+    """
+    from src.api.app import create_app
+
+    logger.info("Starting server", host=host, port=port)
+
+    # Create the app
+    app = create_app()
+
+    # Run with uvicorn
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        reload=reload,
+        log_level="info",
+    )
+
+
 def main() -> None:
     """CLI entry point."""
-    # Immediate feedback before any processing
-    print("BG3 Narrator Bot - Starting...")
-
     parser = argparse.ArgumentParser(
-        description="BG3 Narrator Bot - Convert text to narrated audio",
+        description="BG3 Narrator Bot - Twitch Channel Points narrator with D&D style TTS",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python -m src.main "Hello everyone!"
-  python -m src.main "I found a legendary sword!" --user DragonSlayer
-  python -m src.main "The path ahead is dark..." --style whisper --output narration.wav
-        """,
     )
 
-    parser.add_argument("message", help="Message to narrate")
-    parser.add_argument(
-        "--user", "-u", default="Adventurer", help="Username for narrative (default: Adventurer)"
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Server command
+    server_parser = subparsers.add_parser(
+        "serve",
+        help="Run the web server with Twitch integration",
     )
-    parser.add_argument(
+    server_parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Host to bind to (default: 0.0.0.0)",
+    )
+    server_parser.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=8000,
+        help="Port to bind to (default: 8000)",
+    )
+    server_parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Enable auto-reload for development",
+    )
+
+    # CLI test command
+    cli_parser = subparsers.add_parser(
+        "test",
+        help="Test the LLM → TTS pipeline directly",
+    )
+    cli_parser.add_argument("message", help="Message to narrate")
+    cli_parser.add_argument(
+        "--user",
+        "-u",
+        default="Adventurer",
+        help="Username for narrative (default: Adventurer)",
+    )
+    cli_parser.add_argument(
         "--style",
         "-s",
         default="default",
         choices=["default", "whisper", "proclaim", "mock"],
         help="Narrator style (default: default)",
     )
-    parser.add_argument(
+    cli_parser.add_argument(
         "--output",
         "-o",
         type=Path,
@@ -157,14 +208,25 @@ Examples:
 
     args = parser.parse_args()
 
-    asyncio.run(
-        run_pipeline(
-            message=args.message,
-            user=args.user,
-            style=args.style,
-            output_path=args.output,
+    if args.command == "serve":
+        run_server(
+            host=args.host,
+            port=args.port,
+            reload=args.reload,
         )
-    )
+    elif args.command == "test":
+        print("BG3 Narrator Bot - Testing pipeline...")
+        asyncio.run(
+            run_pipeline(
+                message=args.message,
+                user=args.user,
+                style=args.style,
+                output_path=args.output,
+            )
+        )
+    else:
+        # Default to serve if no command given
+        parser.print_help()
 
 
 if __name__ == "__main__":

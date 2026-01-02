@@ -161,7 +161,11 @@ class TestPiperTTSProvider:
 
         mock_voice = MagicMock()
         mock_voice.config.sample_rate = 22050
-        mock_voice.synthesize_stream_raw.return_value = iter([b"\x00\x01" * 100])
+
+        # Mock audio chunk with audio_int16_bytes attribute
+        mock_chunk = MagicMock()
+        mock_chunk.audio_int16_bytes = b"\x00\x01" * 100
+        mock_voice.synthesize.return_value = iter([mock_chunk])
 
         async def mock_ensure_loaded() -> MagicMock:
             return mock_voice
@@ -170,11 +174,13 @@ class TestPiperTTSProvider:
 
         settings = TTSSettings(speed=1.5)
 
-        with patch("piper.PiperVoice"):
+        with patch("piper.PiperVoice"), patch(
+            "piper.config.SynthesisConfig"
+        ) as mock_config_class:
             await provider.synthesize("Test", settings=settings)
 
         # Verify length_scale was adjusted (speed 1.5 -> length_scale ~0.67)
-        call_args = mock_voice.synthesize_stream_raw.call_args
+        call_args = mock_config_class.call_args
         length_scale = call_args.kwargs.get("length_scale")
         assert length_scale is not None
         assert abs(length_scale - (1.0 / 1.5)) < 0.01

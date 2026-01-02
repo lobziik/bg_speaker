@@ -2724,12 +2724,12 @@ overlay.startPingInterval();
 ### Phase 1: Core Pipeline (Week 1)
 
 **Tasks:**
-1. [ ] Project setup (pyproject.toml, directory structure)
-2. [ ] Configuration loading with Pydantic
-3. [ ] Groq LLM provider implementation
-4. [ ] Piper TTS provider implementation
-5. [ ] Basic pipeline: message → LLM → TTS → audio file
-6. [ ] Unit tests for providers
+1. [x] Project setup (pyproject.toml, directory structure)
+2. [x] Configuration loading with Pydantic
+3. [x] Groq LLM provider implementation
+4. [x] Piper TTS provider implementation
+5. [x] Basic pipeline: message → LLM → TTS → audio file
+6. [x] Unit tests for providers
 
 **Deliverable:** CLI tool that converts text to narrated audio
 
