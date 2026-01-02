@@ -11,3 +11,7 @@ restartPolicyMaxRetries = 3
 [[mounts]]
 source = "data"
 destination = "/app/data"
+
+[[mounts]]
+source = "piper-models"
+destination = "/home/narrator/.local/share/piper-tts"
