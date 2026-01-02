@@ -9,8 +9,8 @@ WORKDIR /app
 # Copy dependency files first for layer caching
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies (no dev extras in production)
-RUN uv sync --frozen --no-dev
+# Install dependencies only (skip project itself - we copy source directly)
+RUN uv sync --frozen --no-dev --no-install-project
 
 # --- Production stage ---
 FROM python:3.12-slim
