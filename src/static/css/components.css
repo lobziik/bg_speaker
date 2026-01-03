@@ -564,3 +564,57 @@ button,
     gap: var(--spacing-md);
     justify-content: center;
 }
+
+/* === Twitch Status === */
+.twitch-status-table {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.twitch-status-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm) 0;
+}
+
+.twitch-status-row .indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-muted);
+}
+
+.twitch-status-row .indicator.connected {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+}
+
+.twitch-status-row .indicator.disconnected {
+    background: var(--error);
+}
+
+.twitch-status-row .indicator.waiting {
+    background: var(--warning);
+    animation: pulse 1.5s infinite;
+}
+
+.twitch-status-row .status-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    min-width: 80px;
+}
+
+.twitch-status-row .status-value {
+    font-family: 'Cinzel', serif;
+    font-size: 14px;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.twitch-status-row .status-action {
+    flex-shrink: 0;
+}

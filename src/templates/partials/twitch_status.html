@@ -1,0 +1,51 @@
+<div class="twitch-status-table">
+    {# Auth Status #}
+    <div class="twitch-status-row">
+        <div class="indicator {% if twitch_status.authorized %}connected{% else %}disconnected{% endif %}"></div>
+        <div class="status-label">Account</div>
+        <div class="status-value">
+            {% if twitch_status.authorized %}
+                {{ twitch_status.broadcaster_login }}
+            {% else %}
+                Not Connected
+            {% endif %}
+        </div>
+        <div class="status-action">
+            {% if not twitch_status.authorized %}
+            <a href="/auth/login" class="btn btn-sm btn-primary">Login</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {# EventSub Connection #}
+    <div class="twitch-status-row">
+        <div class="indicator {% if twitch_status.eventsub_connected %}connected{% else %}disconnected{% endif %}"></div>
+        <div class="status-label">EventSub</div>
+        <div class="status-value">
+            {% if twitch_status.eventsub_connected %}
+                Connected
+            {% else %}
+                Disconnected
+            {% endif %}
+        </div>
+        <div class="status-action"></div>
+    </div>
+
+    {# Reward Status #}
+    <div class="twitch-status-row">
+        <div class="indicator {% if twitch_status.reward_id %}{% if twitch_status.reward_paused %}waiting{% else %}connected{% endif %}{% else %}disconnected{% endif %}"></div>
+        <div class="status-label">Reward</div>
+        <div class="status-value">
+            {% if twitch_status.reward_id %}
+                {% if twitch_status.reward_paused %}
+                    Paused
+                {% else %}
+                    Active
+                {% endif %}
+            {% else %}
+                Not Created
+            {% endif %}
+        </div>
+        <div class="status-action"></div>
+    </div>
+</div>

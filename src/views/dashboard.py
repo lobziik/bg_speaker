@@ -2,13 +2,48 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 # TC001 ignored: FastAPI Depends() requires these at runtime for dependency injection
 from src.api.dependencies import AppStateDep, TemplatesDep  # noqa: TC001
+from src.db.repositories.twitch_state import TwitchStateRepository
+
+if TYPE_CHECKING:
+    from src.api.dependencies import AppState
 
 router = APIRouter()
+
+
+async def _get_twitch_status(state: AppState) -> dict[str, bool | str | None]:
+    """Gather Twitch integration status from all sources.
+
+    Args:
+        state: Application state with service instances.
+
+    Returns:
+        Dictionary with Twitch auth, connection, and reward status.
+    """
+    repo = TwitchStateRepository(state.db.connection)
+    twitch_state = await repo.get_state()
+
+    # Use global_cooldown to determine if reward is paused
+    reward_paused: bool | None = None
+    if state.global_cooldown and twitch_state and twitch_state.reward_id:
+        cooldown_status = state.global_cooldown.get_status()
+        reward_paused = cooldown_status.is_active
+
+    return {
+        "authorized": twitch_state is not None,
+        "broadcaster_login": twitch_state.broadcaster_login if twitch_state else None,
+        "eventsub_connected": (
+            state.twitch_eventsub is not None and state.twitch_eventsub.is_connected
+        ),
+        "reward_id": twitch_state.reward_id if twitch_state else None,
+        "reward_paused": reward_paused,
+    }
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -19,11 +54,12 @@ async def dashboard_page(
 ) -> HTMLResponse:
     """Render dashboard page.
 
-    Shows queue status, rate limit countdown, recent narrations, and worker status.
+    Shows queue status, rate limit countdown, Twitch status, and worker status.
     """
     queue_items = await state.queue.get_items()
     rate_status = state.rate_limiter.get_status()
     worker_running = state.worker.is_running if state.worker else False
+    twitch_status = await _get_twitch_status(state)
 
     return templates.TemplateResponse(
         request,
@@ -35,6 +71,7 @@ async def dashboard_page(
             "rate_status": rate_status,
             "worker_running": worker_running,
             "pipeline_available": state.pipeline is not None,
+            "twitch_status": twitch_status,
         },
     )
 
@@ -109,6 +146,25 @@ async def rate_limit_status_partial(
             "rate_status": rate_status,
             "global_cooldown_status": global_cooldown_status,
         },
+    )
+
+
+@router.get("/partials/twitch-status", response_class=HTMLResponse)
+async def twitch_status_partial(
+    request: Request,
+    state: AppStateDep,
+    templates: TemplatesDep,
+) -> HTMLResponse:
+    """Get Twitch status partial for HTMX polling.
+
+    Provides real-time Twitch connection and reward status.
+    """
+    twitch_status = await _get_twitch_status(state)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/twitch_status.html",
+        {"twitch_status": twitch_status},
     )
 
 

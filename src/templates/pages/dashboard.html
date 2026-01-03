@@ -30,10 +30,12 @@
     </div>
 
     <div class="card">
-        <div class="card-header">Quick Actions</div>
-        <div class="btn-group" style="margin-top: var(--spacing-md);">
-            <a href="/test" class="btn btn-primary">Test Narration</a>
-            <a href="/queue" class="btn btn-secondary">View Queue</a>
+        <div class="card-header">Twitch Integration</div>
+        <div id="twitch-status-display"
+             hx-get="/partials/twitch-status"
+             hx-trigger="every 5s"
+             hx-swap="innerHTML">
+            {% include "partials/twitch_status.html" %}
         </div>
     </div>
 </div>
