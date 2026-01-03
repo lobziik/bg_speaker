@@ -101,11 +101,13 @@ async def initialize_twitch_services(
         twitch_repo = TwitchStateRepository(state.db.connection)
         await twitch_repo.save_reward_id(reward_id)
 
-        # Step 2: Create EventSub service
+        # Step 2: Create EventSub service with tokens
         eventsub = TwitchEventSubService(
             client_id=state.env.twitch_client_id,
             client_secret=state.env.twitch_client_secret,
             broadcaster_id=broadcaster_id,
+            access_token=access_token,
+            refresh_token=refresh_token,
             target_reward_id=reward_id,  # Only listen to our reward
         )
 
@@ -119,7 +121,7 @@ async def initialize_twitch_services(
         eventsub.on_redemption(handler)
 
         # Start EventSub connection
-        await eventsub.start(access_token, refresh_token)
+        await eventsub.start()
         logger.info("twitch_eventsub_started")
 
         # Step 3: Update application state

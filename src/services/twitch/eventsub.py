@@ -70,12 +70,18 @@ class EventSubNotConnectedError(Exception):
 
 
 class _EventSubClient(twitchio.Client):
-    """Internal TwitchIO Client subclass for handling EventSub events."""
+    """Internal TwitchIO Client subclass for handling EventSub events.
+
+    Stores access and refresh tokens for use when adding tokens
+    to the managed HTTP client.
+    """
 
     def __init__(
         self,
         client_id: str,
         client_secret: SecretStr,
+        access_token: str,
+        refresh_token: str,
         redemption_callback: Callable[
             [ChannelPointsRedemptionAdd], Awaitable[None]
         ],
@@ -84,6 +90,8 @@ class _EventSubClient(twitchio.Client):
             client_id=client_id,
             client_secret=client_secret.get_secret_value(),
         )
+        self._access_token = access_token
+        self._refresh_token = refresh_token
         self._redemption_callback = redemption_callback
 
     async def event_custom_redemption_add(
@@ -107,9 +115,12 @@ class TwitchEventSubService:
     - channel:read:redemptions
 
     Usage:
-        service = TwitchEventSubService(client_id, client_secret, broadcaster_id)
+        service = TwitchEventSubService(
+            client_id, client_secret, broadcaster_id,
+            access_token, refresh_token,
+        )
         service.on_redemption(my_handler)
-        await service.start(access_token)
+        await service.start()
         # ... later
         await service.stop()
     """
@@ -119,6 +130,8 @@ class TwitchEventSubService:
         client_id: str,
         client_secret: SecretStr,
         broadcaster_id: str,
+        access_token: str,
+        refresh_token: str,
         target_reward_id: str | None = None,
     ) -> None:
         """Initialize EventSub service.
@@ -127,11 +140,15 @@ class TwitchEventSubService:
             client_id: Twitch application client ID.
             client_secret: Twitch application client secret.
             broadcaster_id: Channel's user ID (numeric string).
+            access_token: Valid OAuth token with required scopes.
+            refresh_token: Refresh token for automatic token renewal.
             target_reward_id: If set, only handle this reward's redemptions.
         """
         self._client_id = client_id
         self._client_secret = client_secret
         self._broadcaster_id = broadcaster_id
+        self._access_token = access_token
+        self._refresh_token = refresh_token
         self._target_reward_id = target_reward_id
 
         self._client: _EventSubClient | None = None
@@ -156,12 +173,10 @@ class TwitchEventSubService:
         """
         self._redemption_handlers.append(handler)
 
-    async def start(self, access_token: str, refresh_token: str) -> None:
+    async def start(self) -> None:
         """Start EventSub WebSocket connection.
 
-        Args:
-            access_token: Valid OAuth token with required scopes.
-            refresh_token: Refresh token for automatic token renewal.
+        Uses tokens provided during initialization.
 
         Raises:
             EventSubConnectionError: If connection fails.
@@ -177,16 +192,18 @@ class TwitchEventSubService:
         )
 
         try:
-            # Create TwitchIO client with our event handler
+            # Create TwitchIO client with tokens and event handler
             logger.debug("eventsub_creating_client")
             self._client = _EventSubClient(
                 client_id=self._client_id,
                 client_secret=self._client_secret,
+                access_token=self._access_token,
+                refresh_token=self._refresh_token,
                 redemption_callback=self._handle_redemption,
             )
 
-            # Add the user token for subscriptions (token + refresh for auto-renewal)
-            await self._client.add_token(access_token, refresh_token)
+            # Add the user token to twitchio's HTTP manager for API calls
+            await self._client.add_token(self._access_token, self._refresh_token)
             logger.info(
                 "eventsub_token_added",
                 broadcaster_id=self._broadcaster_id,
