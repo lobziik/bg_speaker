@@ -286,6 +286,7 @@ class TestWorkerErrorHandling:
 
         async def process_with_error(
             _request: NarrationRequest,
+            **_kwargs: object,
         ) -> tuple[NarrationResult, PipelineMetrics]:
             nonlocal call_count
             call_count += 1

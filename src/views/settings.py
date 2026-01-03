@@ -105,6 +105,7 @@ async def save_narrator_settings(
     settings = NarratorSettings(
         default_style=NarratorStyle(str(form_data["default_style"])),
         system_prompt=str(form_data.get("system_prompt", "")),
+        bypass_llm=form_data.get("bypass_llm") == "on",
     )
 
     await settings_repo.set("narrator", settings)

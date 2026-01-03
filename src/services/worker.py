@@ -15,7 +15,9 @@ import structlog
 
 from src.api.websocket import WebSocketManager
 from src.db.repositories.narration_log import NarrationLogRepository
+from src.db.repositories.settings import SettingsRepository
 from src.models.narration import NarrationRequest, NarrationResult
+from src.models.settings import NarratorSettings
 from src.services.pipeline import NarrationPipeline
 from src.services.queue import NarrationQueue, QueueItem
 
@@ -127,6 +129,16 @@ class QueueWorker:
         )
 
         try:
+            # Load narrator settings to check bypass mode
+            bypass_llm = False
+            if self._db_connection:
+                settings_repo = SettingsRepository(self._db_connection)
+                narrator_settings = await settings_repo.get(
+                    "narrator", NarratorSettings, NarratorSettings()
+                )
+                if narrator_settings:
+                    bypass_llm = narrator_settings.bypass_llm
+
             # Create narration request
             request = NarrationRequest(
                 user=item.user,
@@ -134,7 +146,7 @@ class QueueWorker:
             )
 
             # Process through pipeline
-            result, metrics = await self._pipeline.process(request)
+            result, metrics = await self._pipeline.process(request, bypass_llm=bypass_llm)
 
             # Broadcast to WebSocket clients
             await self._broadcast_narration(result)

@@ -135,9 +135,16 @@ class TwitchAuthService:
             InvalidGrantError: If code is invalid/expired.
             TwitchAuthError: For other auth failures.
         """
+        logger.info("auth_exchanging_code")
         http = await self._get_http()
 
         try:
+            logger.debug(
+                "auth_http_request",
+                method="POST",
+                url=self.TOKEN_URL,
+                grant_type="authorization_code",
+            )
             response = await http.post(
                 self.TOKEN_URL,
                 data={
@@ -147,6 +154,10 @@ class TwitchAuthService:
                     "grant_type": "authorization_code",
                     "redirect_uri": self._redirect_uri,
                 },
+            )
+            logger.debug(
+                "auth_http_response",
+                status=response.status_code,
             )
 
             if response.status_code == 400:
@@ -161,14 +172,20 @@ class TwitchAuthService:
             token_data: TokenResponse = response.json()
 
         except httpx.HTTPStatusError as e:
-            logger.error("token_exchange_failed", status=e.response.status_code)
+            logger.error("auth_code_exchange_failed", status=e.response.status_code)
             raise TwitchAuthError(f"Token exchange failed: {e}") from e
 
         # Validate token and get user info
-        return await self._validate_and_build_tokens(
+        tokens = await self._validate_and_build_tokens(
             token_data["access_token"],
             token_data["refresh_token"],
         )
+        logger.info(
+            "auth_code_exchanged",
+            user_id=tokens.user_id,
+            user_login=tokens.user_login,
+        )
+        return tokens
 
     async def refresh_tokens(self, refresh_token: str) -> TwitchTokens:
         """Refresh expired access token.
@@ -182,9 +199,16 @@ class TwitchAuthService:
         Raises:
             TokenExpiredError: If refresh token is also expired.
         """
+        logger.info("auth_refreshing_token")
         http = await self._get_http()
 
         try:
+            logger.debug(
+                "auth_http_request",
+                method="POST",
+                url=self.TOKEN_URL,
+                grant_type="refresh_token",
+            )
             response = await http.post(
                 self.TOKEN_URL,
                 data={
@@ -193,6 +217,10 @@ class TwitchAuthService:
                     "refresh_token": refresh_token,
                     "grant_type": "refresh_token",
                 },
+            )
+            logger.debug(
+                "auth_http_response",
+                status=response.status_code,
             )
 
             if response.status_code == 400:
@@ -204,13 +232,19 @@ class TwitchAuthService:
             token_data: TokenResponse = response.json()
 
         except httpx.HTTPStatusError as e:
-            logger.error("token_refresh_failed", status=e.response.status_code)
+            logger.error("auth_token_refresh_failed", status=e.response.status_code)
             raise TwitchAuthError(f"Token refresh failed: {e}") from e
 
-        return await self._validate_and_build_tokens(
+        tokens = await self._validate_and_build_tokens(
             token_data["access_token"],
             token_data["refresh_token"],
         )
+        logger.info(
+            "auth_token_refreshed",
+            user_id=tokens.user_id,
+            user_login=tokens.user_login,
+        )
+        return tokens
 
     async def validate_token(self, access_token: str) -> ValidateResponse:
         """Validate access token and get user info.
@@ -224,11 +258,21 @@ class TwitchAuthService:
         Raises:
             TokenExpiredError: If token is invalid/expired.
         """
+        logger.info("auth_validating_token")
         http = await self._get_http()
 
+        logger.debug(
+            "auth_http_request",
+            method="GET",
+            url=self.VALIDATE_URL,
+        )
         response = await http.get(
             self.VALIDATE_URL,
             headers={"Authorization": f"OAuth {access_token}"},
+        )
+        logger.debug(
+            "auth_http_response",
+            status=response.status_code,
         )
 
         if response.status_code == 401:
@@ -236,6 +280,12 @@ class TwitchAuthService:
 
         response.raise_for_status()
         result: ValidateResponse = response.json()
+        logger.info(
+            "auth_token_validated",
+            user_id=result["user_id"],
+            user_login=result["login"],
+            scopes=result["scopes"],
+        )
         return result
 
     async def _validate_and_build_tokens(

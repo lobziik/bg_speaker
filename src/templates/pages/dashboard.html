@@ -11,13 +11,11 @@
 {% endblock %}
 
 {% block content %}
-<div class="grid grid-4">
-    <div id="stats-cards"
-         hx-get="/partials/stats-cards"
-         hx-trigger="every 30s"
-         hx-swap="innerHTML">
-        {% include "partials/stats_cards.html" %}
-    </div>
+<div id="stats-cards"
+     hx-get="/partials/stats-cards"
+     hx-trigger="every 30s"
+     hx-swap="innerHTML">
+    {% include "partials/stats_cards.html" %}
 </div>
 
 <div class="grid grid-2" style="margin-top: var(--spacing-lg);">

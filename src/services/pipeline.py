@@ -74,12 +74,15 @@ class NarrationPipeline:
         self,
         request: NarrationRequest,
         target_lang: LanguageCode = LanguageCode.EN,
+        *,
+        bypass_llm: bool = False,
     ) -> tuple[NarrationResult, PipelineMetrics]:
         """Process a narration request through the pipeline.
 
         Args:
             request: The narration request to process
             target_lang: Target language for TTS
+            bypass_llm: If True, skip LLM formatting and use raw message
 
         Returns:
             Tuple of (NarrationResult, PipelineMetrics)
@@ -93,31 +96,42 @@ class NarrationPipeline:
             user=request.user,
             message_length=len(request.message),
             style=request.style,
+            bypass_llm=bypass_llm,
         )
 
-        # Step 1: LLM formatting
-        logger.debug(
-            "pipeline_llm_start",
-            request_id=request_id,
-            llm_provider=self._llm.name,
-        )
-        llm_start = time.monotonic()
-        llm_response = await self._llm.generate(
-            user=request.user,
-            message=request.message,
-            system_prompt=self._system_prompt,
-            style=request.style,
-        )
-        llm_latency_ms = int((time.monotonic() - llm_start) * 1000)
+        # Step 1: LLM formatting (or bypass)
+        if bypass_llm:
+            # Skip LLM, use raw message directly
+            formatted_text = request.message
+            llm_latency_ms = 0
+            logger.debug(
+                "pipeline_llm_bypassed",
+                request_id=request_id,
+                text_length=len(formatted_text),
+            )
+        else:
+            logger.debug(
+                "pipeline_llm_start",
+                request_id=request_id,
+                llm_provider=self._llm.name,
+            )
+            llm_start = time.monotonic()
+            llm_response = await self._llm.generate(
+                user=request.user,
+                message=request.message,
+                system_prompt=self._system_prompt,
+                style=request.style,
+            )
+            llm_latency_ms = int((time.monotonic() - llm_start) * 1000)
 
-        formatted_text = llm_response.text
+            formatted_text = llm_response.text
 
-        logger.debug(
-            "pipeline_llm_complete",
-            request_id=request_id,
-            formatted_length=len(formatted_text),
-            latency_ms=llm_latency_ms,
-        )
+            logger.debug(
+                "pipeline_llm_complete",
+                request_id=request_id,
+                formatted_length=len(formatted_text),
+                latency_ms=llm_latency_ms,
+            )
 
         # Step 2: TTS synthesis
         logger.debug(

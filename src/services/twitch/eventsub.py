@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -176,6 +177,7 @@ class TwitchEventSubService:
 
         try:
             # Create TwitchIO client with our event handler
+            logger.debug("eventsub_creating_client")
             self._client = _EventSubClient(
                 client_id=self._client_id,
                 client_secret=self._client_secret,
@@ -184,6 +186,10 @@ class TwitchEventSubService:
 
             # Add the user token for subscriptions
             await self._client.add_token(access_token, self._broadcaster_id)
+            logger.info(
+                "eventsub_token_added",
+                broadcaster_id=self._broadcaster_id,
+            )
 
             # Create subscription payload
             subscription = eventsub_subscriptions.ChannelPointsRedeemAddSubscription(
@@ -194,6 +200,10 @@ class TwitchEventSubService:
             await self._client.subscribe_websocket(
                 subscription,
                 token_for=self._broadcaster_id,
+            )
+            logger.info(
+                "eventsub_subscription_created",
+                subscription_type="channel.channel_points_custom_reward_redemption.add",
             )
 
             self._is_connected = True
@@ -263,12 +273,28 @@ class TwitchEventSubService:
 
         # Call all registered handlers
         for handler in self._redemption_handlers:
+            handler_name = handler.__class__.__name__
+            logger.debug(
+                "eventsub_handler_start",
+                handler=handler_name,
+                redemption_id=redemption.id,
+            )
+            handler_start = time.monotonic()
             try:
                 await handler(redemption)
+                handler_latency_ms = int((time.monotonic() - handler_start) * 1000)
+                logger.debug(
+                    "eventsub_handler_complete",
+                    handler=handler_name,
+                    redemption_id=redemption.id,
+                    latency_ms=handler_latency_ms,
+                )
             except Exception as e:
+                handler_latency_ms = int((time.monotonic() - handler_start) * 1000)
                 logger.error(
                     "redemption_handler_error",
-                    handler=handler.__class__.__name__,
+                    handler=handler_name,
                     error=str(e),
                     redemption_id=redemption.id,
+                    latency_ms=handler_latency_ms,
                 )

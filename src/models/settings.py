@@ -39,6 +39,7 @@ class NarratorSettings(StrictModel):
 
     default_style: NarratorStyle = NarratorStyle.DEFAULT
     system_prompt: str = Field(default="")
+    bypass_llm: bool = False  # Skip LLM, read message as-is
 
 
 class QueueSettings(StrictModel):

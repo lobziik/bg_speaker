@@ -148,6 +148,7 @@ class TwitchRewardController:
         logger.info("reward_controller_initializing", title=config.title)
 
         # Try to find existing reward by title
+        logger.info("reward_searching", title=config.title)
         existing = await self._find_reward_by_title(config.title)
 
         if existing:
@@ -223,7 +224,9 @@ class TwitchRewardController:
         Args:
             redemption_id: The redemption ID to fulfill.
         """
+        logger.info("redemption_fulfilling", redemption_id=redemption_id)
         await self._update_redemption_status(redemption_id, "FULFILLED")
+        logger.info("redemption_fulfilled", redemption_id=redemption_id)
 
     async def cancel_redemption(self, redemption_id: str) -> None:
         """Cancel redemption and refund points.
@@ -233,7 +236,9 @@ class TwitchRewardController:
         Args:
             redemption_id: The redemption ID to cancel.
         """
+        logger.info("redemption_cancelling", redemption_id=redemption_id)
         await self._update_redemption_status(redemption_id, "CANCELED")
+        logger.info("redemption_cancelled", redemption_id=redemption_id)
 
     async def close(self) -> None:
         """Close HTTP client."""
@@ -253,12 +258,22 @@ class TwitchRewardController:
         if self._http is None:
             raise RewardOperationError("HTTP client not initialized")
 
+        url = f"{self.BASE_URL}/channel_points/custom_rewards"
+        logger.debug(
+            "reward_http_request",
+            method="GET",
+            url=url,
+        )
         response = await self._http.get(
-            f"{self.BASE_URL}/channel_points/custom_rewards",
+            url,
             params={
                 "broadcaster_id": self._broadcaster_id,
                 "only_manageable_rewards": "true",
             },
+        )
+        logger.debug(
+            "reward_http_response",
+            status=response.status_code,
         )
         response.raise_for_status()
         data = response.json()
@@ -283,8 +298,15 @@ class TwitchRewardController:
         if self._http is None:
             raise RewardOperationError("HTTP client not initialized")
 
+        url = f"{self.BASE_URL}/channel_points/custom_rewards"
+        logger.debug(
+            "reward_http_request",
+            method="POST",
+            url=url,
+            title=config.title,
+        )
         response = await self._http.post(
-            f"{self.BASE_URL}/channel_points/custom_rewards",
+            url,
             params={"broadcaster_id": self._broadcaster_id},
             json={
                 "title": config.title,
@@ -301,6 +323,10 @@ class TwitchRewardController:
                 },
             },
         )
+        logger.debug(
+            "reward_http_response",
+            status=response.status_code,
+        )
 
         if response.status_code != 200:
             raise RewardOperationError(
@@ -315,13 +341,24 @@ class TwitchRewardController:
         if self._http is None:
             raise RewardOperationError("HTTP client not initialized")
 
+        url = f"{self.BASE_URL}/channel_points/custom_rewards"
+        logger.debug(
+            "reward_http_request",
+            method="PATCH",
+            url=url,
+            reward_id=self._reward_id,
+        )
         response = await self._http.patch(
-            f"{self.BASE_URL}/channel_points/custom_rewards",
+            url,
             params={
                 "broadcaster_id": self._broadcaster_id,
                 "id": self._reward_id,
             },
             json=body,
+        )
+        logger.debug(
+            "reward_http_response",
+            status=response.status_code,
         )
 
         if response.status_code != 200:
@@ -338,8 +375,16 @@ class TwitchRewardController:
         if self._http is None or self._reward_id is None:
             raise RewardOperationError("Controller not initialized")
 
+        url = f"{self.BASE_URL}/channel_points/custom_rewards/redemptions"
+        logger.debug(
+            "reward_http_request",
+            method="PATCH",
+            url=url,
+            redemption_id=redemption_id,
+            status=status,
+        )
         response = await self._http.patch(
-            f"{self.BASE_URL}/channel_points/custom_rewards/redemptions",
+            url,
             params={
                 "broadcaster_id": self._broadcaster_id,
                 "reward_id": self._reward_id,
@@ -347,11 +392,15 @@ class TwitchRewardController:
             },
             json={"status": status},
         )
+        logger.debug(
+            "reward_http_response",
+            status=response.status_code,
+        )
 
         if response.status_code != 200:
             logger.warning(
                 "redemption_status_update_failed",
                 redemption_id=redemption_id,
-                status=status,
+                target_status=status,
                 response_status=response.status_code,
             )

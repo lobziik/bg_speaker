@@ -270,6 +270,36 @@ body {
     letter-spacing: 1px;
 }
 
+/* Stats Cards Container - responsive row layout */
+#stats-cards {
+    display: flex;
+    flex-direction: row;
+    gap: var(--spacing-lg);
+}
+
+#stats-cards .stat-card {
+    flex: 1;
+    min-width: 0;
+}
+
+@media (max-width: 1024px) {
+    #stats-cards {
+        flex-wrap: wrap;
+    }
+    #stats-cards .stat-card {
+        flex: 1 1 calc(50% - var(--spacing-lg) / 2);
+    }
+}
+
+@media (max-width: 768px) {
+    #stats-cards {
+        flex-direction: column;
+    }
+    #stats-cards .stat-card {
+        flex: 1 1 100%;
+    }
+}
+
 /* === Tables === */
 .table-container {
     overflow-x: auto;

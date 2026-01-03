@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from src.api.dependencies import get_app_state
+from src.api.middleware import AccessLogMiddleware
 from src.api.routes import health, overlay, test, twitch
 from src.api.websocket import get_websocket_manager
 
@@ -121,6 +122,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Access logging middleware (GET at DEBUG, others at INFO)
+    app.add_middleware(AccessLogMiddleware)
 
     # Mount static files
     if STATIC_PATH.exists():

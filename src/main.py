@@ -7,8 +7,10 @@ Supports two modes:
 
 import argparse
 import asyncio
+import logging
 import sys
 from pathlib import Path
+from typing import Literal
 
 import structlog
 import uvicorn
@@ -19,23 +21,90 @@ from src.providers.llm.groq import GroqLLMProvider
 from src.providers.tts.piper import PiperSettings, PiperTTSProvider
 from src.services.pipeline import NarrationPipeline
 
-# Configure structured logging
-structlog.configure(
-    processors=[
-        structlog.stdlib.filter_by_level,
+LogLevel = Literal["debug", "info", "warning", "error"]
+
+
+def configure_logging(level: LogLevel = "info") -> None:
+    """Configure structlog and stdlib logging.
+
+    Routes all stdlib logging through structlog processors for consistent output.
+
+    Args:
+        level: Log level (debug, info, warning, error).
+    """
+    # Map string level to logging constants
+    level_map = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+    }
+    numeric_level = level_map[level]
+
+    # Shared processors for both structlog and stdlib
+    shared_processors: list[structlog.types.Processor] = [
+        structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
-        structlog.dev.ConsoleRenderer(),
-    ],
-    wrapper_class=structlog.stdlib.BoundLogger,
-    context_class=dict,
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    cache_logger_on_first_use=True,
-)
+    ]
+
+    # Configure structlog
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,
+            *shared_processors,
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=False,  # Allow reconfiguration
+    )
+
+    # Create formatter that renders structlog output
+    formatter = structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=shared_processors,
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            structlog.dev.ConsoleRenderer(),
+        ],
+    )
+
+    # Configure root handler
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+
+    # Reset root logger
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(numeric_level)
+
+    # Silence noisy third-party loggers - these produce excessive output
+    noisy_loggers = [
+        "aiosqlite",  # DB operation traces
+        "websockets",  # WebSocket frame-level traces
+        "websockets.client",
+        "websockets.server",
+        "websockets.protocol",
+        "uvicorn",  # Uvicorn internal logs
+        "uvicorn.error",
+        "uvicorn.access",
+    ]
+    for logger_name in noisy_loggers:
+        lib_logger = logging.getLogger(logger_name)
+        lib_logger.handlers.clear()  # Remove uvicorn's handlers
+        lib_logger.addHandler(handler)  # Use our structlog handler
+        lib_logger.setLevel(logging.WARNING)
+        lib_logger.propagate = False  # Don't double-log
+
+
+# Initialize with default level (can be reconfigured via CLI)
+configure_logging("info")
 
 logger = structlog.get_logger()
 
@@ -124,28 +193,40 @@ async def run_pipeline(
     print(f"Total processing time: {metrics.total_latency_ms}ms")
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = False) -> None:
+def run_server(
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    reload: bool = False,
+    log_level: LogLevel = "info",
+) -> None:
     """Run the FastAPI server.
 
     Args:
         host: Host to bind to.
         port: Port to bind to.
         reload: Enable auto-reload for development.
+        log_level: Log level for the application.
     """
     from src.api.app import create_app
 
-    logger.info("Starting server", host=host, port=port)
+    # Reconfigure logging with the specified level
+    configure_logging(log_level)
+
+    logger.info("server_starting", host=host, port=port, log_level=log_level)
 
     # Create the app
     app = create_app()
 
     # Run with uvicorn
+    # - log_config=None prevents uvicorn from reconfiguring logging
+    # - access_log=False disables uvicorn's access log (we use middleware)
     uvicorn.run(
         app,
         host=host,
         port=port,
         reload=reload,
-        log_level="info",
+        log_config=None,
+        access_log=False,
     )
 
 
@@ -180,6 +261,13 @@ def main() -> None:
         action="store_true",
         help="Enable auto-reload for development",
     )
+    server_parser.add_argument(
+        "--log-level",
+        "-l",
+        default="info",
+        choices=["debug", "info", "warning", "error"],
+        help="Log level (default: info)",
+    )
 
     # CLI test command
     cli_parser = subparsers.add_parser(
@@ -207,6 +295,13 @@ def main() -> None:
         default=None,
         help="Output audio file path (default: output.wav)",
     )
+    cli_parser.add_argument(
+        "--log-level",
+        "-l",
+        default="info",
+        choices=["debug", "info", "warning", "error"],
+        help="Log level (default: info)",
+    )
 
     args = parser.parse_args()
 
@@ -215,8 +310,10 @@ def main() -> None:
             host=args.host,
             port=args.port,
             reload=args.reload,
+            log_level=args.log_level,
         )
     elif args.command == "test":
+        configure_logging(args.log_level)
         print("BG3 Narrator Bot - Testing pipeline...")
         asyncio.run(
             run_pipeline(

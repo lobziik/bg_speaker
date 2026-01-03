@@ -401,6 +401,16 @@ class WebSocketManager:
         async with self._lock:
             clients = list(self._clients.items())
 
+        if not clients:
+            return
+
+        message_type = message.get("type", "unknown")
+        logger.debug(
+            "ws_broadcast_start",
+            message_type=message_type,
+            client_count=len(clients),
+        )
+
         for websocket, _client in clients:
             if not await self._send_to_client(websocket, message):
                 disconnected.append(websocket)
@@ -408,6 +418,14 @@ class WebSocketManager:
         # Clean up disconnected clients
         for websocket in disconnected:
             await self.disconnect(websocket)
+
+        sent_count = len(clients) - len(disconnected)
+        logger.debug(
+            "ws_broadcast_complete",
+            message_type=message_type,
+            sent_count=sent_count,
+            failed_count=len(disconnected),
+        )
 
     async def _send_to_client(
         self,
