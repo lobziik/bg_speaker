@@ -93,6 +93,18 @@ class GlobalCooldownManager:
         self._cooldown_ends_at: datetime | None = None
         self._lock = asyncio.Lock()
 
+    def set_rewards_controller(self, controller: TwitchRewardController) -> None:
+        """Set the rewards controller after Twitch initialization.
+
+        This allows the cooldown manager to be created before Twitch services
+        are initialized (e.g., at app startup before OAuth is complete).
+
+        Args:
+            controller: Initialized TwitchRewardController instance.
+        """
+        self._rewards = controller
+        logger.info("global_cooldown_rewards_controller_set")
+
     async def initialize(self) -> None:
         """Initialize and restore state from database.
 

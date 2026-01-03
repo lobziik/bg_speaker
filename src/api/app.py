@@ -63,6 +63,33 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await state.global_cooldown.initialize()
     logger.info("global_cooldown_manager_initialized", cooldown_seconds=cooldown_seconds)
 
+    # Try to initialize Twitch services if tokens exist in DB
+    from src.db.repositories.twitch_state import TwitchStateRepository
+    from src.services.twitch.init_services import initialize_twitch_services
+
+    twitch_repo = TwitchStateRepository(state.db.connection)
+    twitch_state = await twitch_repo.get_state()
+
+    if twitch_state:
+        try:
+            success = await initialize_twitch_services(
+                state=state,
+                access_token=twitch_state.access_token,
+                broadcaster_id=twitch_state.broadcaster_id,
+            )
+            if success:
+                logger.info("twitch_services_initialized_at_startup")
+            else:
+                logger.warning("twitch_services_init_failed_at_startup")
+        except Exception as e:
+            logger.warning(
+                "twitch_startup_error",
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+    else:
+        logger.info("no_twitch_tokens", message="Skipping Twitch init - not authorized")
+
     # Initialize pipeline and worker if LLM key is available
     if state.env.groq_api_key:
         from src.models.settings import TTSVoiceSettings

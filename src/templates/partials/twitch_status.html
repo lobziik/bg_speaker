@@ -11,7 +11,12 @@
             {% endif %}
         </div>
         <div class="status-action">
-            {% if not twitch_status.authorized %}
+            {% if twitch_status.authorized %}
+            <button hx-post="/auth/logout"
+                    hx-swap="none"
+                    hx-on::after-request="window.location.reload()"
+                    class="btn btn-sm btn-secondary">Logout</button>
+            {% else %}
             <a href="/auth/login" class="btn btn-sm btn-primary">Login</a>
             {% endif %}
         </div>

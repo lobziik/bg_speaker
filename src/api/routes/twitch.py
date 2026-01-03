@@ -3,12 +3,16 @@
 import secrets
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
 from src.api.dependencies import AppStateDep
 from src.db.repositories.twitch_state import TwitchStateRepository
 from src.services.twitch.auth import InvalidGrantError, TwitchAuthError
+from src.services.twitch.init_services import initialize_twitch_services
+
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -89,6 +93,25 @@ async def oauth_callback(
         broadcaster_login=tokens.user_login,
     )
 
+    # Initialize Twitch services after successful OAuth
+    try:
+        success = await initialize_twitch_services(
+            state=state,
+            access_token=tokens.access_token,
+            broadcaster_id=tokens.user_id,
+        )
+        if success:
+            logger.info("twitch_services_initialized_after_oauth")
+        else:
+            logger.warning("twitch_services_init_failed_after_oauth")
+    except Exception as e:
+        logger.warning(
+            "twitch_init_after_oauth_error",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+        # Continue - tokens are saved, user can retry via page refresh
+
     return {
         "status": "authorized",
         "user": tokens.user_login,
@@ -100,7 +123,8 @@ async def oauth_callback(
 async def logout(state: AppStateDep) -> dict[str, str]:
     """Clear stored Twitch tokens.
 
-    Stops EventSub connection and clears all stored OAuth tokens.
+    Stops EventSub connection, closes rewards controller, and clears
+    all stored OAuth tokens.
 
     Returns:
         Logout confirmation.
@@ -112,6 +136,11 @@ async def logout(state: AppStateDep) -> dict[str, str]:
         await state.twitch_eventsub.stop()
         state.twitch_eventsub = None
 
+    if state.twitch_rewards:
+        await state.twitch_rewards.close()
+        state.twitch_rewards = None
+
+    logger.info("twitch_logged_out")
     return {"status": "logged_out"}
 
 
