@@ -7,6 +7,7 @@
 {% block content %}
 <div class="tabs">
     <a href="#language" class="tab active" onclick="showTab('language', this)">Language</a>
+    <a href="#tts_voice" class="tab" onclick="showTab('tts_voice', this)">TTS Voice</a>
     <a href="#narrator" class="tab" onclick="showTab('narrator', this)">Narrator</a>
     <a href="#queue" class="tab" onclick="showTab('queue', this)">Queue</a>
     <a href="#overlay" class="tab" onclick="showTab('overlay', this)">Overlay</a>
@@ -67,6 +68,40 @@
 
         <div class="btn-group">
             <button type="submit" class="btn btn-primary">Save Language Settings</button>
+        </div>
+    </form>
+</div>
+
+<!-- TTS Voice Settings -->
+<div id="tab-tts_voice" class="card tab-content" style="display: none;">
+    <div class="card-header">TTS Voice Settings</div>
+    <form hx-post="/settings/tts_voice"
+          hx-target="#toast-container"
+          hx-swap="innerHTML">
+        <p class="help-text" style="margin-bottom: 1rem;">
+            Select which Piper TTS voice to use for each language. The voice will be automatically
+            selected based on the Narrator Language setting.
+        </p>
+
+        <div class="form-row">
+            {% for lang in language_codes %}
+            {% if lang.value in voices_by_lang %}
+            <div class="form-group">
+                <label for="voice_{{ lang.value }}">{{ lang.value | upper }} Voice</label>
+                <select name="voice_{{ lang.value }}" id="voice_{{ lang.value }}">
+                    {% for voice in voices_by_lang[lang.value] %}
+                    <option value="{{ voice.id }}" {% if selected_voices.get(lang.value) == voice.id %}selected{% endif %}>
+                        {{ voice.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">Save TTS Voice Settings</button>
         </div>
     </form>
 </div>

@@ -144,6 +144,30 @@ class TestWorkerProcessing:
         assert request.message == "Hello world!"
 
     @pytest.mark.asyncio
+    async def test_process_item_passes_target_lang(
+        self,
+        worker: QueueWorker,
+        queue: NarrationQueue,
+        mock_pipeline: MagicMock,
+    ) -> None:
+        """Processing should pass target_lang to pipeline.
+
+        Without DB connection, worker uses default (EN).
+        """
+        await worker.start()
+
+        await queue.add("TestUser", "Hello world!")
+        await asyncio.sleep(0.1)
+
+        await worker.stop()
+
+        # Pipeline should have been called with target_lang
+        mock_pipeline.process.assert_called_once()
+        call_args = mock_pipeline.process.call_args
+        # Default language when no DB is EN
+        assert call_args.kwargs.get("target_lang") == LanguageCode.EN
+
+    @pytest.mark.asyncio
     async def test_process_broadcasts_narration_start(
         self,
         worker: QueueWorker,

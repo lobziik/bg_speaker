@@ -79,9 +79,10 @@ class TestNarrationPipeline:
         assert call_args.kwargs["user"] == "TestUser"
         assert call_args.kwargs["message"] == "Hello everyone!"
 
-        # Verify TTS was called with LLM output
+        # Verify TTS was called with LLM output and language
         mock_tts_provider.synthesize.assert_called_once_with(
-            "The adventurer speaks with great enthusiasm!"
+            "The adventurer speaks with great enthusiasm!",
+            language=LanguageCode.EN,
         )
 
         # Verify result

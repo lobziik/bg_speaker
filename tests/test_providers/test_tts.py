@@ -4,8 +4,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.models.narration import LanguageCode
 from src.providers.tts.base import TTSProvider, TTSSettings, Voice
-from src.providers.tts.piper import DEFAULT_VOICES, PiperSettings, PiperTTSProvider
+from src.providers.tts.piper import (
+    DEFAULT_VOICES,
+    LANGUAGE_DEFAULT_VOICES,
+    PiperSettings,
+    PiperTTSProvider,
+)
 
 
 class TestTTSProviderProtocol:
@@ -136,17 +142,19 @@ class TestPiperTTSProvider:
         mock_voice = MagicMock()
         mock_voice.config.sample_rate = 22050
 
-        # Mock audio stream to return some bytes
-        mock_voice.synthesize_stream_raw.return_value = iter([b"\x00\x01" * 1000])
+        # Mock audio chunk with audio_int16_bytes attribute
+        mock_chunk = MagicMock()
+        mock_chunk.audio_int16_bytes = b"\x00\x01" * 1000
+        mock_voice.synthesize.return_value = iter([mock_chunk])
 
-        # Patch the _ensure_loaded to return our mock
-        async def mock_ensure_loaded() -> MagicMock:
+        # Patch the _ensure_voice_loaded to return our mock
+        async def mock_ensure_voice_loaded(_voice_id: str) -> MagicMock:
             return mock_voice
 
-        provider._ensure_loaded = mock_ensure_loaded  # type: ignore[method-assign]
+        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[method-assign]
 
         # Patch the piper module import that happens in _synthesize_sync
-        with patch("piper.PiperVoice"):
+        with patch("piper.PiperVoice"), patch("piper.config.SynthesisConfig"):
             result = await provider.synthesize("Hello, world!")
 
         assert isinstance(result, bytes)
@@ -167,10 +175,10 @@ class TestPiperTTSProvider:
         mock_chunk.audio_int16_bytes = b"\x00\x01" * 100
         mock_voice.synthesize.return_value = iter([mock_chunk])
 
-        async def mock_ensure_loaded() -> MagicMock:
+        async def mock_ensure_voice_loaded(_voice_id: str) -> MagicMock:
             return mock_voice
 
-        provider._ensure_loaded = mock_ensure_loaded  # type: ignore[method-assign]
+        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[method-assign]
 
         settings = TTSSettings(speed=1.5)
 
@@ -192,14 +200,18 @@ class TestPiperTTSProvider:
 
         mock_voice = MagicMock()
         mock_voice.config.sample_rate = 22050
-        mock_voice.synthesize_stream_raw.return_value = iter([b"\x00\x01" * 100])
 
-        async def mock_ensure_loaded() -> MagicMock:
+        # Mock audio chunk with audio_int16_bytes attribute
+        mock_chunk = MagicMock()
+        mock_chunk.audio_int16_bytes = b"\x00\x01" * 100
+        mock_voice.synthesize.return_value = iter([mock_chunk])
+
+        async def mock_ensure_voice_loaded(_voice_id: str) -> MagicMock:
             return mock_voice
 
-        provider._ensure_loaded = mock_ensure_loaded  # type: ignore[method-assign]
+        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[method-assign]
 
-        with patch("piper.PiperVoice"):
+        with patch("piper.PiperVoice"), patch("piper.config.SynthesisConfig"):
             chunks = []
             async for chunk in provider.synthesize_stream("Test"):
                 chunks.append(chunk)
@@ -246,3 +258,165 @@ class TestPiperTTSProvider:
 
         result = await provider.health_check()
         assert result is False
+
+
+class TestPiperLanguageVoiceSelection:
+    """Tests for language-based voice selection in Piper."""
+
+    def test_language_default_voices_mapping(self) -> None:
+        """Test that all supported languages have default voices."""
+        # All language codes should have a default voice
+        for lang in [LanguageCode.EN, LanguageCode.RU, LanguageCode.DE,
+                     LanguageCode.FR, LanguageCode.ES]:
+            assert lang in LANGUAGE_DEFAULT_VOICES
+            voice_id = LANGUAGE_DEFAULT_VOICES[lang]
+            # Voice ID should be valid format
+            assert "-" in voice_id
+            assert "_" in voice_id
+
+    def test_get_voice_for_language_returns_default(self) -> None:
+        """Should return default voice for supported languages."""
+        provider = PiperTTSProvider()
+
+        assert provider.get_voice_for_language(LanguageCode.EN) == "en_US-lessac-medium"
+        assert provider.get_voice_for_language(LanguageCode.RU) == "ru_RU-ruslan-medium"
+        assert provider.get_voice_for_language(LanguageCode.DE) == "de_DE-thorsten-medium"
+        assert provider.get_voice_for_language(LanguageCode.FR) == "fr_FR-siwis-medium"
+        assert provider.get_voice_for_language(LanguageCode.ES) == "es_ES-davefx-medium"
+
+    def test_get_voice_for_language_uses_override(self) -> None:
+        """Should prefer user override over default."""
+        provider = PiperTTSProvider(
+            voice_overrides={LanguageCode.EN: "en_GB-alba-medium"}
+        )
+
+        # EN should use override
+        assert provider.get_voice_for_language(LanguageCode.EN) == "en_GB-alba-medium"
+        # RU should still use default
+        assert provider.get_voice_for_language(LanguageCode.RU) == "ru_RU-ruslan-medium"
+
+    def test_get_voice_for_language_multiple_overrides(self) -> None:
+        """Should handle multiple language overrides."""
+        provider = PiperTTSProvider(
+            voice_overrides={
+                LanguageCode.EN: "en_US-ryan-medium",
+                LanguageCode.RU: "ru_RU-irina-medium",
+            }
+        )
+
+        assert provider.get_voice_for_language(LanguageCode.EN) == "en_US-ryan-medium"
+        assert provider.get_voice_for_language(LanguageCode.RU) == "ru_RU-irina-medium"
+        # DE should use default
+        assert provider.get_voice_for_language(LanguageCode.DE) == "de_DE-thorsten-medium"
+
+    def test_get_voices_for_language_filters_correctly(self) -> None:
+        """Should return only voices matching the language."""
+        provider = PiperTTSProvider()
+
+        en_voices = provider.get_voices_for_language(LanguageCode.EN)
+        assert len(en_voices) > 0
+        assert all(v.language == "en" for v in en_voices)
+
+        ru_voices = provider.get_voices_for_language(LanguageCode.RU)
+        assert len(ru_voices) > 0
+        assert all(v.language == "ru" for v in ru_voices)
+
+    def test_provider_initialization_with_voice_overrides(self) -> None:
+        """Test provider initialization with voice overrides."""
+        overrides = {LanguageCode.EN: "en_GB-alba-medium"}
+        provider = PiperTTSProvider(voice_overrides=overrides)
+
+        assert provider._voice_overrides == overrides
+
+    def test_provider_initialization_empty_overrides(self) -> None:
+        """Test provider initialization with empty overrides."""
+        provider = PiperTTSProvider(voice_overrides={})
+
+        assert provider._voice_overrides == {}
+
+    @pytest.mark.asyncio
+    async def test_synthesize_with_language_parameter(self) -> None:
+        """Test synthesis uses language to select voice."""
+        provider = PiperTTSProvider()
+
+        mock_voice = MagicMock()
+        mock_voice.config.sample_rate = 22050
+
+        mock_chunk = MagicMock()
+        mock_chunk.audio_int16_bytes = b"\x00\x01" * 100
+        mock_voice.synthesize.return_value = iter([mock_chunk])
+
+        # Track which voice was loaded
+        loaded_voice_ids: list[str] = []
+
+        async def mock_ensure_voice_loaded(voice_id: str) -> MagicMock:
+            loaded_voice_ids.append(voice_id)
+            return mock_voice
+
+        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[method-assign]
+
+        with patch("piper.PiperVoice"), patch("piper.config.SynthesisConfig"):
+            await provider.synthesize("Test", language=LanguageCode.RU)
+
+        # Should have loaded Russian voice
+        assert "ru_RU-ruslan-medium" in loaded_voice_ids
+
+    @pytest.mark.asyncio
+    async def test_synthesize_with_language_and_override(self) -> None:
+        """Test synthesis uses override when language specified."""
+        provider = PiperTTSProvider(
+            voice_overrides={LanguageCode.RU: "ru_RU-irina-medium"}
+        )
+
+        mock_voice = MagicMock()
+        mock_voice.config.sample_rate = 22050
+
+        mock_chunk = MagicMock()
+        mock_chunk.audio_int16_bytes = b"\x00\x01" * 100
+        mock_voice.synthesize.return_value = iter([mock_chunk])
+
+        loaded_voice_ids: list[str] = []
+
+        async def mock_ensure_voice_loaded(voice_id: str) -> MagicMock:
+            loaded_voice_ids.append(voice_id)
+            return mock_voice
+
+        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[method-assign]
+
+        with patch("piper.PiperVoice"), patch("piper.config.SynthesisConfig"):
+            await provider.synthesize("Test", language=LanguageCode.RU)
+
+        # Should have loaded override voice, not default
+        assert "ru_RU-irina-medium" in loaded_voice_ids
+        assert "ru_RU-ruslan-medium" not in loaded_voice_ids
+
+    @pytest.mark.asyncio
+    async def test_synthesize_voice_id_takes_precedence(self) -> None:
+        """Test explicit voice_id takes precedence over language."""
+        provider = PiperTTSProvider()
+
+        mock_voice = MagicMock()
+        mock_voice.config.sample_rate = 22050
+
+        mock_chunk = MagicMock()
+        mock_chunk.audio_int16_bytes = b"\x00\x01" * 100
+        mock_voice.synthesize.return_value = iter([mock_chunk])
+
+        loaded_voice_ids: list[str] = []
+
+        async def mock_ensure_voice_loaded(voice_id: str) -> MagicMock:
+            loaded_voice_ids.append(voice_id)
+            return mock_voice
+
+        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[method-assign]
+
+        with patch("piper.PiperVoice"), patch("piper.config.SynthesisConfig"):
+            # Specify both voice_id and language - voice_id should win
+            await provider.synthesize(
+                "Test",
+                voice_id="custom-voice",
+                language=LanguageCode.RU
+            )
+
+        assert "custom-voice" in loaded_voice_ids
+        assert "ru_RU-ruslan-medium" not in loaded_voice_ids

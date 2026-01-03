@@ -2,7 +2,10 @@
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from src.models.narration import LanguageCode
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,7 @@ class TTSProvider(Protocol):
         text: str,
         voice_id: str | None = None,
         settings: TTSSettings | None = None,
+        language: "LanguageCode | None" = None,
     ) -> bytes:
         """Synthesize text to audio.
 
@@ -60,6 +64,7 @@ class TTSProvider(Protocol):
             text: Text to synthesize
             voice_id: Voice identifier (optional, uses default)
             settings: TTS settings (optional)
+            language: Target language for automatic voice selection (optional)
 
         Returns:
             Audio bytes (WAV or MP3)
@@ -71,11 +76,18 @@ class TTSProvider(Protocol):
         text: str,
         voice_id: str | None = None,
         settings: TTSSettings | None = None,
+        language: "LanguageCode | None" = None,
     ) -> AsyncIterator[bytes]:
         """Streaming audio synthesis.
 
         Note: Implementations should be async generators (async def with yield).
         The return type is AsyncIterator to match async generator behavior.
+
+        Args:
+            text: Text to synthesize
+            voice_id: Voice identifier (optional, uses default)
+            settings: TTS settings (optional)
+            language: Target language for automatic voice selection (optional)
 
         Yields:
             Audio chunks as they're generated

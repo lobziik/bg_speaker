@@ -65,13 +65,22 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # Initialize pipeline and worker if LLM key is available
     if state.env.groq_api_key:
+        from src.models.settings import TTSVoiceSettings
         from src.providers.llm.groq import GroqLLMProvider
         from src.providers.tts.piper import PiperTTSProvider
         from src.services.pipeline import NarrationPipeline
         from src.services.worker import QueueWorker
 
+        # Load TTS voice settings for per-language voice overrides
+        tts_voice_settings = await settings_repo.get(
+            "tts_voice", TTSVoiceSettings, TTSVoiceSettings()
+        )
+        voice_overrides = (
+            tts_voice_settings.voice_overrides if tts_voice_settings else {}
+        )
+
         llm_provider = GroqLLMProvider(api_key=state.env.groq_api_key)
-        tts_provider = PiperTTSProvider()
+        tts_provider = PiperTTSProvider(voice_overrides=voice_overrides)
 
         state.pipeline = NarrationPipeline(
             llm_provider=llm_provider,

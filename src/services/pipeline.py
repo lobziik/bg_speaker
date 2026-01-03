@@ -139,9 +139,10 @@ class NarrationPipeline:
             request_id=request_id,
             tts_provider=self._tts.name,
             text_length=len(formatted_text),
+            target_lang=target_lang.value,
         )
         tts_start = time.monotonic()
-        audio_data = await self._tts.synthesize(formatted_text)
+        audio_data = await self._tts.synthesize(formatted_text, language=target_lang)
         tts_latency_ms = int((time.monotonic() - tts_start) * 1000)
 
         logger.debug(

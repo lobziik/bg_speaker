@@ -11,9 +11,21 @@ from urllib.request import urlopen
 import structlog
 
 from src.core.types import StrictModel
+from src.models.narration import LanguageCode
 from src.providers.tts.base import TTSProvider, TTSSettings, Voice
 
 logger = structlog.get_logger()
+
+
+# Default voice for each supported language.
+# Users can override these via TTSVoiceSettings.
+LANGUAGE_DEFAULT_VOICES: dict[LanguageCode, str] = {
+    LanguageCode.EN: "en_US-lessac-medium",
+    LanguageCode.RU: "ru_RU-ruslan-medium",
+    LanguageCode.DE: "de_DE-thorsten-medium",
+    LanguageCode.FR: "fr_FR-siwis-medium",
+    LanguageCode.ES: "es_ES-davefx-medium",
+}
 
 
 # Piper voice model download configuration
@@ -278,18 +290,25 @@ class PiperTTSProvider:
     - Small models (~60-100MB per voice)
     - 30+ languages, 100+ voices
     - No voice cloning (uses pre-trained voices)
+    - Dynamic voice selection based on language
 
     Voices: https://rhasspy.github.io/piper-samples/
     """
 
-    def __init__(self, settings: PiperSettings | None = None) -> None:
+    def __init__(
+        self,
+        settings: PiperSettings | None = None,
+        voice_overrides: dict[LanguageCode, str] | None = None,
+    ) -> None:
         """Initialize Piper TTS provider.
 
         Args:
-            settings: Piper-specific settings
+            settings: Piper-specific settings (used as fallback for non-language calls)
+            voice_overrides: Per-language voice overrides from user settings
         """
         self._settings = settings or PiperSettings()
-        self._voice: object | None = None  # PiperVoice, lazy loaded
+        self._voice_overrides = voice_overrides or {}
+        self._voices: dict[str, object] = {}  # voice_id -> PiperVoice, lazy loaded
         self._lock = asyncio.Lock()
 
     @property
@@ -307,17 +326,75 @@ class PiperTTSProvider:
         """Piper doesn't support voice cloning."""
         return False
 
-    async def _ensure_loaded(self) -> object:
-        """Lazy load voice model."""
-        if self._voice is None:
-            async with self._lock:
-                if self._voice is None:
-                    loop = asyncio.get_event_loop()
-                    self._voice = await loop.run_in_executor(None, self._load_voice)
-        return self._voice
+    def get_voice_for_language(self, lang: LanguageCode) -> str:
+        """Get the voice ID for a given language.
 
-    def _load_voice(self) -> object:
+        Checks user overrides first, then falls back to defaults.
+
+        Args:
+            lang: Target language code
+
+        Returns:
+            Piper voice ID (e.g., "en_US-lessac-medium")
+
+        Raises:
+            ValueError: If no voice is configured for the language
+        """
+        # Check user override first
+        if lang in self._voice_overrides:
+            return self._voice_overrides[lang]
+
+        # Fall back to default
+        if lang not in LANGUAGE_DEFAULT_VOICES:
+            supported = [code.value for code in LANGUAGE_DEFAULT_VOICES]
+            raise ValueError(
+                f"No default voice configured for language '{lang.value}'. "
+                f"Supported languages: {supported}"
+            )
+        return LANGUAGE_DEFAULT_VOICES[lang]
+
+    def get_voices_for_language(self, lang: LanguageCode) -> list[Voice]:
+        """Get available voices for a specific language.
+
+        Args:
+            lang: Language code to filter by
+
+        Returns:
+            List of voices matching the language
+        """
+        return [v for v in DEFAULT_VOICES if v.language == lang.value]
+
+    async def _ensure_voice_loaded(self, voice_id: str) -> object:
+        """Ensure a specific voice model is loaded, loading if necessary.
+
+        Args:
+            voice_id: Voice ID to load (e.g., "en_US-lessac-medium")
+
+        Returns:
+            PiperVoice instance
+        """
+        if voice_id not in self._voices:
+            async with self._lock:
+                # Double-check after acquiring lock
+                if voice_id not in self._voices:
+                    loop = asyncio.get_event_loop()
+                    self._voices[voice_id] = await loop.run_in_executor(
+                        None, self._load_voice, voice_id
+                    )
+        return self._voices[voice_id]
+
+    async def _ensure_loaded(self) -> object:
+        """Lazy load default voice model (backward compatibility).
+
+        Uses the voice from settings as the default.
+        """
+        return await self._ensure_voice_loaded(self._settings.voice)
+
+    def _load_voice(self, voice_id: str) -> object:
         """Load Piper voice model (sync).
+
+        Args:
+            voice_id: Voice ID to load (e.g., "en_US-lessac-medium")
 
         Returns:
             PiperVoice instance
@@ -325,27 +402,19 @@ class PiperTTSProvider:
         # Import here to allow the module to load even without piper installed
         from piper import PiperVoice
 
-        if self._settings.model_path:
-            model_path = self._settings.model_path
-            logger.info(
-                "piper_voice_loading",
-                voice=self._settings.voice,
-                model_path=str(model_path),
-            )
-        else:
-            # Ensure model is downloaded (with progress), then get the path
-            model_path = ensure_voice_downloaded(self._settings.voice)
-            logger.info(
-                "piper_voice_loading",
-                voice=self._settings.voice,
-                model_path=str(model_path),
-            )
+        # Ensure model is downloaded (with progress), then get the path
+        model_path = ensure_voice_downloaded(voice_id)
+        logger.info(
+            "piper_voice_loading",
+            voice=voice_id,
+            model_path=str(model_path),
+        )
 
         voice = PiperVoice.load(str(model_path))
 
         logger.info(
             "piper_voice_loaded",
-            voice=self._settings.voice,
+            voice=voice_id,
             model_path=str(model_path),
         )
         return voice
@@ -353,26 +422,40 @@ class PiperTTSProvider:
     async def synthesize(
         self,
         text: str,
-        voice_id: str | None = None,  # noqa: ARG002
+        voice_id: str | None = None,
         settings: TTSSettings | None = None,
+        language: LanguageCode | None = None,
     ) -> bytes:
         """Synthesize text to WAV audio.
 
         Args:
             text: Text to synthesize
-            voice_id: Voice identifier (ignored, uses configured voice)
+            voice_id: Explicit voice identifier (takes precedence)
             settings: TTS settings
+            language: Target language for automatic voice selection
 
         Returns:
             WAV audio bytes
+
+        Raises:
+            ValueError: If language has no configured voice
         """
+        # Determine which voice to use (priority: voice_id > language > default)
+        if voice_id:
+            selected_voice_id = voice_id
+        elif language:
+            selected_voice_id = self.get_voice_for_language(language)
+        else:
+            selected_voice_id = self._settings.voice
+
         logger.debug(
             "piper_synthesis_start",
             text_length=len(text),
-            voice=self._settings.voice,
+            voice=selected_voice_id,
+            language=language.value if language else None,
         )
 
-        voice = await self._ensure_loaded()
+        voice = await self._ensure_voice_loaded(selected_voice_id)
 
         # Map generic settings to Piper-specific
         length_scale = self._settings.length_scale
@@ -388,7 +471,7 @@ class PiperTTSProvider:
             logger.error(
                 "piper_synthesis_failed",
                 text_length=len(text),
-                voice=self._settings.voice,
+                voice=selected_voice_id,
                 error=str(e),
                 error_type=type(e).__name__,
             )
@@ -398,7 +481,7 @@ class PiperTTSProvider:
             "piper_synthesis_complete",
             text_length=len(text),
             audio_size=len(audio_bytes),
-            voice=self._settings.voice,
+            voice=selected_voice_id,
         )
 
         return audio_bytes
@@ -455,9 +538,10 @@ class PiperTTSProvider:
         text: str,
         voice_id: str | None = None,
         settings: TTSSettings | None = None,
+        language: LanguageCode | None = None,
     ) -> AsyncIterator[bytes]:
         """Streaming not supported - yields full audio."""
-        audio = await self.synthesize(text, voice_id, settings)
+        audio = await self.synthesize(text, voice_id, settings, language)
         yield audio
 
     async def list_voices(self) -> list[Voice]:

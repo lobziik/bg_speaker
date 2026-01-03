@@ -16,8 +16,10 @@ from src.models.settings import (
     NarratorSettings,
     OverlaySettings,
     QueueSettings,
+    TTSVoiceSettings,
     TwitchRewardSettings,
 )
+from src.providers.tts.piper import DEFAULT_VOICES, LANGUAGE_DEFAULT_VOICES
 
 router = APIRouter()
 
@@ -48,10 +50,31 @@ async def settings_page(
     queue = await settings_repo.get("queue", QueueSettings, QueueSettings())
     overlay = await settings_repo.get("overlay", OverlaySettings, OverlaySettings())
     reward = await settings_repo.get("reward", TwitchRewardSettings, TwitchRewardSettings())
+    tts_voice = await settings_repo.get(
+        "tts_voice", TTSVoiceSettings, TTSVoiceSettings()
+    )
 
     # Get available providers from environment
     available_llm = state.env.get_available_llm_providers()
     available_tts = state.env.get_available_tts_providers()
+
+    # Group voices by language for the UI
+    voices_by_lang: dict[str, list[dict[str, str]]] = {}
+    for voice in DEFAULT_VOICES:
+        if voice.language not in voices_by_lang:
+            voices_by_lang[voice.language] = []
+        voices_by_lang[voice.language].append({
+            "id": voice.id,
+            "name": voice.name,
+        })
+
+    # Get currently selected voice for each language (user override or default)
+    selected_voices: dict[str, str] = {}
+    for lang_code in LanguageCode:
+        if tts_voice and lang_code in tts_voice.voice_overrides:
+            selected_voices[lang_code.value] = tts_voice.voice_overrides[lang_code]
+        elif lang_code in LANGUAGE_DEFAULT_VOICES:
+            selected_voices[lang_code.value] = LANGUAGE_DEFAULT_VOICES[lang_code]
 
     return templates.TemplateResponse(
         request,
@@ -63,10 +86,13 @@ async def settings_page(
             "queue": queue,
             "overlay": overlay,
             "reward": reward,
+            "tts_voice": tts_voice,
             "language_codes": list(LanguageCode),
             "narrator_styles": list(NarratorStyle),
             "available_llm": available_llm,
             "available_tts": available_tts,
+            "voices_by_lang": voices_by_lang,
+            "selected_voices": selected_voices,
         },
     )
 
@@ -214,4 +240,34 @@ async def save_reward_settings(
     return Response(
         content="<div class='toast success'>Reward settings saved</div>",
         headers=_toast_response("Reward settings saved"),
+    )
+
+
+@router.post("/settings/tts_voice", response_class=HTMLResponse)
+async def save_tts_voice_settings(
+    request: Request,
+    settings_repo: SettingsRepoDep,
+) -> Response:
+    """Save TTS voice settings (per-language voice selection)."""
+    form_data = await request.form()
+
+    # Build voice overrides from form data
+    # Form fields are named voice_<lang_code> (e.g., voice_en, voice_ru)
+    voice_overrides: dict[LanguageCode, str] = {}
+    for lang_code in LanguageCode:
+        field_name = f"voice_{lang_code.value}"
+        voice_value = form_data.get(field_name)
+        if voice_value:
+            voice_str = str(voice_value)
+            # Only store if different from default (to keep overrides minimal)
+            default_voice = LANGUAGE_DEFAULT_VOICES.get(lang_code)
+            if voice_str != default_voice:
+                voice_overrides[lang_code] = voice_str
+
+    settings = TTSVoiceSettings(voice_overrides=voice_overrides)
+    await settings_repo.set("tts_voice", settings)
+
+    return Response(
+        content="<div class='toast success'>TTS voice settings saved</div>",
+        headers=_toast_response("TTS voice settings saved"),
     )

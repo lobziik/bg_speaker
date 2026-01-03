@@ -83,6 +83,20 @@ class TwitchRewardSettings(StrictModel):
     )
 
 
+class TTSVoiceSettings(StrictModel):
+    """TTS voice settings with per-language overrides.
+
+    Allows users to customize which Piper voice is used for each language.
+    If a language is not specified in overrides, the default voice for that
+    language is used (defined in LANGUAGE_DEFAULT_VOICES in piper.py).
+    """
+
+    voice_overrides: dict[LanguageCode, str] = Field(
+        default_factory=dict,
+        description="Custom voice ID per language (overrides defaults)",
+    )
+
+
 class AppSettings(StrictModel):
     """Root settings object combining all settings."""
 
@@ -91,6 +105,7 @@ class AppSettings(StrictModel):
     queue: QueueSettings = Field(default_factory=QueueSettings)
     overlay: OverlaySettings = Field(default_factory=OverlaySettings)
     reward: TwitchRewardSettings = Field(default_factory=TwitchRewardSettings)
+    tts_voice: TTSVoiceSettings = Field(default_factory=TTSVoiceSettings)
 
 
 # === Provider Settings ===
