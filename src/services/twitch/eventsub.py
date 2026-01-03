@@ -202,6 +202,13 @@ class TwitchEventSubService:
                 redemption_callback=self._handle_redemption,
             )
 
+            # CRITICAL: Must call login() to initialize app token.
+            # TwitchIO's _find_token() has early return when both header token
+            # and _app_token are None (None == None → True), which skips
+            # the token_for lookup entirely, causing 401 errors.
+            await self._client.login(load_tokens=False, save_tokens=False)
+            logger.debug("eventsub_client_logged_in")
+
             # Add the user token to twitchio's HTTP manager for API calls
             # TwitchIO stores tokens keyed by user_id from its validation response
             token_payload = await self._client.add_token(
