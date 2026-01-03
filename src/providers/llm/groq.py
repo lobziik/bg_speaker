@@ -5,6 +5,10 @@ from typing import ClassVar
 
 import structlog
 from groq import APIConnectionError, APIStatusError, AsyncGroq
+from groq.types.chat import (
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 from pydantic import SecretStr
 
 from src.providers.llm.base import LLMProvider, LLMResponse, Model
@@ -110,12 +114,17 @@ class GroqLLMProvider:
             user_content = f"[Style: {style}] {user_content}"
 
         try:
+            system_msg: ChatCompletionSystemMessageParam = {
+                "role": "system",
+                "content": system_prompt,
+            }
+            user_msg: ChatCompletionUserMessageParam = {
+                "role": "user",
+                "content": user_content,
+            }
             response = await self._client.chat.completions.create(
                 model=self._model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
+                messages=[system_msg, user_msg],
                 temperature=self._temperature,
                 max_tokens=self._max_tokens,
             )
@@ -172,12 +181,17 @@ class GroqLLMProvider:
             user_content = f"[Style: {style}] {user_content}"
 
         try:
+            system_msg: ChatCompletionSystemMessageParam = {
+                "role": "system",
+                "content": system_prompt,
+            }
+            user_msg: ChatCompletionUserMessageParam = {
+                "role": "user",
+                "content": user_content,
+            }
             stream = await self._client.chat.completions.create(
                 model=self._model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
+                messages=[system_msg, user_msg],
                 temperature=self._temperature,
                 max_tokens=self._max_tokens,
                 stream=True,
@@ -210,9 +224,13 @@ class GroqLLMProvider:
         """Check if provider is available."""
         try:
             # Make a minimal request to check connectivity
+            ping_msg: ChatCompletionUserMessageParam = {
+                "role": "user",
+                "content": "ping",
+            }
             response = await self._client.chat.completions.create(
                 model=self._model,
-                messages=[{"role": "user", "content": "ping"}],
+                messages=[ping_msg],
                 max_tokens=1,
             )
             return bool(response.choices)

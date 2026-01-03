@@ -57,9 +57,11 @@ async def run_pipeline(
     env = get_env_settings()
 
     # Check for required API key
-    if not env.groq_api_key:
+    if env.groq_api_key is None:
         logger.error("GROQ_API_KEY environment variable not set")
         sys.exit(1)
+
+    assert env.groq_api_key is not None  # For type narrowing after sys.exit
 
     # Initialize providers
     logger.info("Initializing providers...")

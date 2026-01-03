@@ -1,0 +1,18 @@
+<div class="rate-limit-status">
+    <div class="indicator {% if rate_status.tts_available %}ready{% else %}waiting{% endif %}"></div>
+    <div>
+        <div class="countdown tts-countdown">
+            {% if rate_status.tts_available %}
+                Ready to narrate
+            {% elif rate_status.tts_available_in_seconds is not none %}
+                Next narration in {{ "%.1f"|format(rate_status.tts_available_in_seconds) }}s
+            {% else %}
+                Waiting...
+            {% endif %}
+        </div>
+        <small style="color: var(--text-muted);">
+            Rate limit: {{ rate_status.tts_rate_limit_seconds }}s |
+            User cooldown: {{ rate_status.user_cooldown_seconds }}s
+        </small>
+    </div>
+</div>

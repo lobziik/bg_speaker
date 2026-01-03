@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Test - BG3 Narrator{% endblock %}
+
+{% block header %}Test Narration{% endblock %}
+
+{% block content %}
+{% if not pipeline_available %}
+<div class="card" style="background: rgba(244, 67, 54, 0.1); border-color: var(--error);">
+    <p style="color: var(--error);">
+        Pipeline not available - missing GROQ_API_KEY environment variable.
+        Test narrations will be queued but not processed.
+    </p>
+</div>
+{% elif not worker_running %}
+<div class="card" style="background: rgba(255, 152, 0, 0.1); border-color: var(--warning);">
+    <p style="color: var(--warning);">
+        Worker is stopped. <a href="/" style="color: var(--gold);">Start it from the Dashboard</a> to process narrations.
+    </p>
+</div>
+{% endif %}
+
+<div class="grid grid-2">
+    <div class="card">
+        <div class="card-header">Submit Test Message</div>
+        <form hx-post="/test/narrate"
+              hx-target="#narration-result"
+              hx-swap="innerHTML">
+            <div class="form-group">
+                <label for="user">Username</label>
+                <input type="text" name="user" id="user"
+                       value="TestUser" placeholder="Enter username">
+            </div>
+
+            <div class="form-group">
+                <label for="message">Message</label>
+                <textarea name="message" id="message" rows="4"
+                          placeholder="Enter the message to narrate..."
+                          data-max-length="300"
+                          required></textarea>
+                <div class="char-counter">0 / 300</div>
+            </div>
+
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">
+                    Add to Queue
+                    <span class="htmx-indicator">...</span>
+                </button>
+                <button type="reset" class="btn btn-secondary">Clear</button>
+            </div>
+        </form>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-header">Result</div>
+            <div id="narration-result">
+                <div class="empty-state">
+                    <p>Submit a message to see the result</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: var(--spacing-lg);">
+            <div class="card-header">Rate Limit</div>
+            <div id="rate-limit-display"
+                 hx-get="/partials/rate-limit-status"
+                 hx-trigger="every 1s"
+                 hx-swap="innerHTML">
+                <div class="rate-limit-status">
+                    <div class="indicator ready"></div>
+                    <div class="countdown">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Character counter
+const textarea = document.getElementById('message');
+const counter = document.querySelector('.char-counter');
+const maxLength = 300;
+
+textarea.addEventListener('input', function() {
+    const len = this.value.length;
+    counter.textContent = len + ' / ' + maxLength;
+    counter.classList.toggle('warning', len > maxLength * 0.8);
+    counter.classList.toggle('error', len > maxLength);
+});
+</script>
+{% endblock %}

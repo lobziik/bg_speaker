@@ -6,15 +6,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
+from fastapi.templating import Jinja2Templates
 
 from src.config import EnvSettings, get_env_settings
 from src.db.manager import DatabaseManager
+from src.db.repositories.settings import SettingsRepository
 from src.db.repositories.twitch_state import TwitchStateRepository
 from src.models.settings import QueueSettings
 from src.services.queue import NarrationQueue
 from src.services.rate_limiter import RateLimiter
 from src.services.twitch.auth import TwitchAuthService
+
+# Templates path
+TEMPLATES_PATH = Path(__file__).parent.parent / "templates"
 
 if TYPE_CHECKING:
     from src.services.pipeline import NarrationPipeline
@@ -118,10 +123,34 @@ def reset_app_state() -> None:
 AppStateDep = Annotated[AppState, Depends(get_app_state)]
 
 
-def get_settings_repo() -> TwitchStateRepository:
+def get_twitch_state_repo() -> TwitchStateRepository:
     """Get Twitch state repository."""
     state = get_app_state()
     return TwitchStateRepository(state.db.connection)
 
 
-TwitchStateRepoDep = Annotated[TwitchStateRepository, Depends(get_settings_repo)]
+TwitchStateRepoDep = Annotated[TwitchStateRepository, Depends(get_twitch_state_repo)]
+
+
+# Templates singleton
+_templates: Jinja2Templates | None = None
+
+
+def get_templates() -> Jinja2Templates:
+    """Get Jinja2 templates instance."""
+    global _templates
+    if _templates is None:
+        _templates = Jinja2Templates(directory=TEMPLATES_PATH)
+    return _templates
+
+
+TemplatesDep = Annotated[Jinja2Templates, Depends(get_templates)]
+
+
+def get_settings_repo() -> SettingsRepository:
+    """Get settings repository."""
+    state = get_app_state()
+    return SettingsRepository(state.db.connection)
+
+
+SettingsRepoDep = Annotated[SettingsRepository, Depends(get_settings_repo)]

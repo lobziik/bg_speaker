@@ -1,0 +1,23 @@
+{% if success %}
+<div class="test-result success">
+    <div class="result-title">Added to Queue</div>
+    <p><strong>User:</strong> {{ user }}</p>
+    <p><strong>Message:</strong> {{ message }}{% if message|length >= 100 %}...{% endif %}</p>
+    <p><strong>Queue Position:</strong> #{{ queue_position }}</p>
+    <p><strong>Item ID:</strong> <code>{{ item_id }}</code></p>
+    <p style="margin-top: var(--spacing-md); font-size: 12px; color: var(--text-muted);">
+        The message will be narrated when it reaches the front of the queue.
+        Open the <a href="/overlay" target="_blank" style="color: var(--gold);">overlay</a> to hear it.
+    </p>
+</div>
+{% else %}
+<div class="test-result error">
+    <div class="result-title">Failed</div>
+    <p>{{ error }}</p>
+    {% if retry_after %}
+    <p style="margin-top: var(--spacing-sm); font-size: 12px;">
+        Try again in {{ "%.1f"|format(retry_after) }} seconds
+    </p>
+    {% endif %}
+</div>
+{% endif %}

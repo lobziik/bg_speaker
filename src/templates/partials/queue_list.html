@@ -1,0 +1,31 @@
+{% if queue_items %}
+    {% for item in queue_items %}
+    <div class="queue-item" data-item-id="{{ item.id }}">
+        <div class="position">{{ loop.index }}</div>
+        <div class="info">
+            <div class="user">{{ item.user }}</div>
+            <div class="message">{{ item.message }}</div>
+        </div>
+        <div class="actions">
+            {% if item.priority > 0 %}
+            <span class="badge badge-priority">VIP</span>
+            {% endif %}
+            <button class="btn btn-sm btn-danger"
+                    hx-delete="/queue/{{ item.id }}"
+                    hx-target="closest .queue-item"
+                    hx-swap="outerHTML"
+                    hx-confirm="Skip this message?">
+                Skip
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="empty-state">
+        <div class="icon">📭</div>
+        <p>Queue is empty</p>
+        <p style="font-size: 12px; margin-top: var(--spacing-sm);">
+            Messages will appear here when users redeem the narrator reward
+        </p>
+    </div>
+{% endif %}

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - BG3 Narrator{% endblock %}
+
+{% block header %}Dashboard{% endblock %}
+
+{% block header_actions %}
+<div id="worker-status-container">
+    {% include "partials/worker_status.html" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-4">
+    <div id="stats-cards"
+         hx-get="/partials/stats-cards"
+         hx-trigger="every 30s"
+         hx-swap="innerHTML">
+        {% include "partials/stats_cards.html" %}
+    </div>
+</div>
+
+<div class="grid grid-2" style="margin-top: var(--spacing-lg);">
+    <div class="card">
+        <div class="card-header">Rate Limit Status</div>
+        <div id="rate-limit-display"
+             hx-get="/partials/rate-limit-status"
+             hx-trigger="every 1s"
+             hx-swap="innerHTML">
+            {% include "partials/rate_limit_status.html" %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Quick Actions</div>
+        <div class="btn-group" style="margin-top: var(--spacing-md);">
+            <a href="/test" class="btn btn-primary">Test Narration</a>
+            <a href="/queue" class="btn btn-secondary">View Queue</a>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-top: var(--spacing-lg);">
+    <div class="card-header">Current Queue</div>
+    <div id="queue-status"
+         hx-get="/queue/partials/queue-list"
+         hx-trigger="refresh from:body"
+         hx-swap="innerHTML">
+        {% if queue_items %}
+            {% for item in queue_items[:5] %}
+            <div class="queue-item" data-item-id="{{ item.id }}">
+                <div class="position">{{ loop.index }}</div>
+                <div class="info">
+                    <div class="user">{{ item.user }}</div>
+                    <div class="message">{{ item.message[:80] }}{% if item.message|length > 80 %}...{% endif %}</div>
+                </div>
+                {% if item.priority > 0 %}
+                <span class="badge badge-priority">VIP</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% if queue_items|length > 5 %}
+            <div class="empty-state" style="padding: var(--spacing-md);">
+                <a href="/queue">View all {{ queue_items|length }} items</a>
+            </div>
+            {% endif %}
+        {% else %}
+            <div class="empty-state">
+                <p>Queue is empty</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -7,10 +7,12 @@ A Twitch Channel Points integration that reads chat messages in the dramatic voi
 - **Channel Points Integration**: Only redeemed messages are narrated (spam filtering via cost)
 - **D&D Narrator Style**: LLM transforms casual chat into dramatic narrator prose
 - **Fast Local TTS**: Piper TTS with high-quality pre-trained voices (MIT license)
+- **Web UI Dashboard**: BG3-themed configuration interface with HTMX
 - **Configurable Languages**: Source, narrator, and subtitle languages are independent
 - **Provider Abstraction**: Swappable LLM, TTS, and Translation providers
 - **Priority Queue**: VIP users processed first, with rate limiting
-- **Type Safety**: Pydantic v2 strict mode, mypy, typed protocols everywhere
+- **OBS Overlay**: WebSocket-based overlay with subtitles and audio
+- **Type Safety**: Pydantic v2 strict mode, mypy + ty, typed protocols everywhere
 
 ## Quick Start
 
@@ -69,8 +71,9 @@ DATABASE_URL=sqlite:///data/narrator.db
 # Run tests
 uv run pytest
 
-# Type checking
+# Type checking (both mypy and ty)
 uv run mypy src
+uv run ty check src
 
 # Linting
 uv run ruff check .
@@ -78,6 +81,23 @@ uv run ruff check .
 # Format code
 uv run ruff format .
 ```
+
+## Web UI
+
+The bot includes a BG3-themed web dashboard at `http://localhost:8000`:
+
+- **Dashboard** (`/`): Queue status, rate limit countdown, worker control
+- **Settings** (`/settings`): Language, narrator, queue, overlay, and reward configuration
+- **Queue** (`/queue`): View and manage pending narrations
+- **Test** (`/test`): Submit test narrations manually
+- **Logs** (`/logs`): View narration history with filtering
+
+## OBS Overlay
+
+Add a Browser Source in OBS pointing to `http://localhost:8000/overlay`:
+- Width: 1920, Height: 1080 (or match your canvas)
+- Enable "Control audio via OBS"
+- Debug mode: Add `?debug=1` for connection status
 
 ## API Endpoints
 
@@ -91,14 +111,21 @@ uv run ruff format .
 | `/api/test/narrate` | POST | Test narration (requires `user`, `message`) |
 | `/api/test/queue` | GET | Get current queue |
 | `/api/test/queue/{id}` | DELETE | Skip queue item |
+| `/ws/overlay` | WS | WebSocket for OBS overlay |
 
 ## Architecture
 
 ```
 Twitch EventSub → Queue → Rate Limiter → Pipeline (LLM → TTS) → WebSocket → OBS
+                    ↑                                              ↓
+                 Web UI ←──────────────────────────────────────────┘
 ```
 
-See `ai/progress_phase_1.md` and `ai/progress_phase_2.md` for detailed implementation notes.
+See `ai/progress_phase_*.md` for detailed implementation notes:
+- Phase 1: Core providers (LLM, TTS)
+- Phase 2: Twitch integration, queue, rate limiting
+- Phase 3: WebSocket, OBS overlay
+- Phase 4: Web UI dashboard
 
 ## License
 

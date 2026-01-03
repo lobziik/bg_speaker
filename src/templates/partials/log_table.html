@@ -1,0 +1,109 @@
+{% if logs %}
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>User</th>
+                <th>Message</th>
+                <th>Status</th>
+                <th>LLM</th>
+                <th>TTS</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>
+                    <span style="color: var(--gold-dim);">{{ log.user }}</span>
+                </td>
+                <td>
+                    <span title="{{ log.message_original }}">
+                        {{ log.message_original[:50] }}{% if log.message_original|length > 50 %}...{% endif %}
+                    </span>
+                </td>
+                <td>
+                    {% if log.status == 'success' %}
+                        <span class="badge badge-success">Success</span>
+                    {% elif log.status == 'error' %}
+                        <span class="badge badge-error">Error</span>
+                    {% elif log.status == 'filtered' %}
+                        <span class="badge badge-warning">Filtered</span>
+                    {% elif log.status == 'rate_limited' %}
+                        <span class="badge badge-info">Rate Limited</span>
+                    {% else %}
+                        <span class="badge">{{ log.status }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if log.latency_llm_ms %}
+                        {{ log.latency_llm_ms }}ms
+                    {% else %}
+                        --
+                    {% endif %}
+                </td>
+                <td>
+                    {% if log.latency_tts_ms %}
+                        {{ log.latency_tts_ms }}ms
+                    {% else %}
+                        --
+                    {% endif %}
+                </td>
+                <td>
+                    {% if log.latency_total_ms %}
+                        <strong>{{ log.latency_total_ms }}ms</strong>
+                    {% else %}
+                        --
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if current_page > 1 %}
+        <a href="/logs?page={{ current_page - 1 }}{% if filters.user %}&user={{ filters.user }}{% endif %}{% if filters.status %}&status={{ filters.status }}{% endif %}"
+           hx-get="/logs/partials/table?page={{ current_page - 1 }}{% if filters.user %}&user={{ filters.user }}{% endif %}{% if filters.status %}&status={{ filters.status }}{% endif %}"
+           hx-target="#logs-table">
+            &laquo; Prev
+        </a>
+    {% else %}
+        <span class="disabled">&laquo; Prev</span>
+    {% endif %}
+
+    <span class="active">{{ current_page }} / {{ total_pages }}</span>
+
+    {% if current_page < total_pages %}
+        <a href="/logs?page={{ current_page + 1 }}{% if filters.user %}&user={{ filters.user }}{% endif %}{% if filters.status %}&status={{ filters.status }}{% endif %}"
+           hx-get="/logs/partials/table?page={{ current_page + 1 }}{% if filters.user %}&user={{ filters.user }}{% endif %}{% if filters.status %}&status={{ filters.status }}{% endif %}"
+           hx-target="#logs-table">
+            Next &raquo;
+        </a>
+    {% else %}
+        <span class="disabled">Next &raquo;</span>
+    {% endif %}
+</div>
+{% endif %}
+
+<p style="text-align: center; margin-top: var(--spacing-md); font-size: 12px; color: var(--text-muted);">
+    Showing {{ logs|length }} of {{ total }} entries
+</p>
+{% else %}
+<div class="empty-state">
+    <div class="icon">📜</div>
+    <p>No logs found</p>
+    <p style="font-size: 12px; margin-top: var(--spacing-sm);">
+        {% if filters.user or filters.status or filters.date_from or filters.date_to %}
+            Try adjusting your filters
+        {% else %}
+            Narrations will be logged here as they are processed
+        {% endif %}
+    </p>
+</div>
+{% endif %}

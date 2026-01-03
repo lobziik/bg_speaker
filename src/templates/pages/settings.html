@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - BG3 Narrator{% endblock %}
+
+{% block header %}Settings{% endblock %}
+
+{% block content %}
+<div class="tabs">
+    <a href="#language" class="tab active" onclick="showTab('language', this)">Language</a>
+    <a href="#narrator" class="tab" onclick="showTab('narrator', this)">Narrator</a>
+    <a href="#queue" class="tab" onclick="showTab('queue', this)">Queue</a>
+    <a href="#overlay" class="tab" onclick="showTab('overlay', this)">Overlay</a>
+    <a href="#reward" class="tab" onclick="showTab('reward', this)">Twitch Reward</a>
+</div>
+
+<!-- Language Settings -->
+<div id="tab-language" class="card tab-content">
+    <div class="card-header">Language Settings</div>
+    <form hx-post="/settings/language"
+          hx-target="#toast-container"
+          hx-swap="innerHTML">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="source_lang">Source Language</label>
+                <select name="source_lang" id="source_lang">
+                    {% for code in language_codes %}
+                    <option value="{{ code.value }}" {% if language.source_lang == code %}selected{% endif %}>
+                        {{ code.value | upper }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small class="help-text">Language of incoming chat messages</small>
+            </div>
+
+            <div class="form-group">
+                <label for="narrator_lang">Narrator Language</label>
+                <select name="narrator_lang" id="narrator_lang">
+                    {% for code in language_codes %}
+                    <option value="{{ code.value }}" {% if language.narrator_lang == code %}selected{% endif %}>
+                        {{ code.value | upper }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small class="help-text">Language for TTS output</small>
+            </div>
+
+            <div class="form-group">
+                <label for="subtitle_lang">Subtitle Language</label>
+                <select name="subtitle_lang" id="subtitle_lang">
+                    {% for code in language_codes %}
+                    <option value="{{ code.value }}" {% if language.subtitle_lang == code %}selected{% endif %}>
+                        {{ code.value | upper }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small class="help-text">Language for overlay subtitles</small>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" name="auto_translate" {% if language.auto_translate %}checked{% endif %}>
+                Enable automatic translation
+            </label>
+            <small class="help-text">Translate messages when source and narrator languages differ</small>
+        </div>
+
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">Save Language Settings</button>
+        </div>
+    </form>
+</div>
+
+<!-- Narrator Settings -->
+<div id="tab-narrator" class="card tab-content" style="display: none;">
+    <div class="card-header">Narrator Settings</div>
+    <form hx-post="/settings/narrator"
+          hx-target="#toast-container"
+          hx-swap="innerHTML">
+        <div class="form-group">
+            <label for="default_style">Default Style</label>
+            <select name="default_style" id="default_style">
+                {% for style in narrator_styles %}
+                <option value="{{ style.value }}" {% if narrator.default_style == style %}selected{% endif %}>
+                    {{ style.value | title }}
+                </option>
+                {% endfor %}
+            </select>
+            <small class="help-text">Default narration style when not specified</small>
+        </div>
+
+        <div class="form-group">
+            <label for="system_prompt">Custom System Prompt</label>
+            <textarea name="system_prompt" id="system_prompt" rows="6"
+                      placeholder="Leave empty to use default D&D narrator prompt">{{ narrator.system_prompt }}</textarea>
+            <small class="help-text">Override the default narrator personality prompt</small>
+        </div>
+
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">Save Narrator Settings</button>
+        </div>
+    </form>
+</div>
+
+<!-- Queue Settings -->
+<div id="tab-queue" class="card tab-content" style="display: none;">
+    <div class="card-header">Queue Settings</div>
+    <form hx-post="/settings/queue"
+          hx-target="#toast-container"
+          hx-swap="innerHTML">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="max_size">Max Queue Size</label>
+                <div class="range-container">
+                    <input type="range" name="max_size" id="max_size"
+                           min="1" max="200" value="{{ queue.max_size }}">
+                    <span class="range-value">{{ queue.max_size }}</span>
+                </div>
+                <small class="help-text">Maximum messages in queue (1-200)</small>
+            </div>
+
+            <div class="form-group">
+                <label for="tts_rate_limit_seconds">TTS Rate Limit (seconds)</label>
+                <div class="range-container">
+                    <input type="range" name="tts_rate_limit_seconds" id="tts_rate_limit_seconds"
+                           min="1" max="60" value="{{ queue.tts_rate_limit_seconds }}">
+                    <span class="range-value">{{ queue.tts_rate_limit_seconds }}</span>
+                </div>
+                <small class="help-text">Minimum time between narrations</small>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="cooldown_seconds">User Cooldown (seconds)</label>
+                <div class="range-container">
+                    <input type="range" name="cooldown_seconds" id="cooldown_seconds"
+                           min="0" max="300" value="{{ queue.cooldown_seconds }}">
+                    <span class="range-value">{{ queue.cooldown_seconds }}</span>
+                </div>
+                <small class="help-text">Per-user cooldown between messages</small>
+            </div>
+
+            <div class="form-group">
+                <label for="message_max_length">Max Message Length</label>
+                <div class="range-container">
+                    <input type="range" name="message_max_length" id="message_max_length"
+                           min="10" max="500" value="{{ queue.message_max_length }}">
+                    <span class="range-value">{{ queue.message_max_length }}</span>
+                </div>
+                <small class="help-text">Maximum characters per message</small>
+            </div>
+        </div>
+
+        <input type="hidden" name="message_min_length" value="{{ queue.message_min_length }}">
+
+        <div class="form-group">
+            <label for="priority_users">Priority Users</label>
+            <input type="text" name="priority_users" id="priority_users"
+                   value="{{ queue.priority_users | join(', ') }}"
+                   placeholder="user1, user2, user3">
+            <small class="help-text">Comma-separated usernames to prioritize in queue</small>
+        </div>
+
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">Save Queue Settings</button>
+        </div>
+    </form>
+</div>
+
+<!-- Overlay Settings -->
+<div id="tab-overlay" class="card tab-content" style="display: none;">
+    <div class="card-header">Overlay Settings</div>
+    <form hx-post="/settings/overlay"
+          hx-target="#toast-container"
+          hx-swap="innerHTML">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="font_family">Font Family</label>
+                <select name="font_family" id="font_family">
+                    <option value="IM Fell English SC" {% if overlay.font_family == "IM Fell English SC" %}selected{% endif %}>IM Fell English SC</option>
+                    <option value="Cinzel" {% if overlay.font_family == "Cinzel" %}selected{% endif %}>Cinzel</option>
+                    <option value="Georgia" {% if overlay.font_family == "Georgia" %}selected{% endif %}>Georgia</option>
+                    <option value="serif" {% if overlay.font_family == "serif" %}selected{% endif %}>System Serif</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="font_size">Font Size</label>
+                <div class="range-container">
+                    <input type="range" name="font_size" id="font_size"
+                           min="12" max="72" value="{{ overlay.font_size }}">
+                    <span class="range-value">{{ overlay.font_size }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="text_color">Text Color</label>
+                <input type="color" name="text_color" id="text_color"
+                       value="{{ overlay.text_color }}">
+            </div>
+
+            <div class="form-group">
+                <label for="background_color">Background</label>
+                <input type="text" name="background_color" id="background_color"
+                       value="{{ overlay.background_color }}"
+                       placeholder="rgba(20, 15, 10, 0.85)">
+                <small class="help-text">RGBA or hex color</small>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="position">Position</label>
+                <select name="position" id="position">
+                    <option value="top" {% if overlay.position == "top" %}selected{% endif %}>Top</option>
+                    <option value="center" {% if overlay.position == "center" %}selected{% endif %}>Center</option>
+                    <option value="bottom" {% if overlay.position == "bottom" %}selected{% endif %}>Bottom</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="animation_duration_ms">Animation Duration (ms)</label>
+                <div class="range-container">
+                    <input type="range" name="animation_duration_ms" id="animation_duration_ms"
+                           min="0" max="2000" step="100" value="{{ overlay.animation_duration_ms }}">
+                    <span class="range-value">{{ overlay.animation_duration_ms }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">Save Overlay Settings</button>
+        </div>
+    </form>
+</div>
+
+<!-- Twitch Reward Settings -->
+<div id="tab-reward" class="card tab-content" style="display: none;">
+    <div class="card-header">Twitch Reward Settings</div>
+    <form hx-post="/settings/reward"
+          hx-target="#toast-container"
+          hx-swap="innerHTML">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="title">Reward Title</label>
+                <input type="text" name="title" id="title" value="{{ reward.title }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="cost">Cost (Channel Points)</label>
+                <input type="number" name="cost" id="cost"
+                       min="1" max="1000000" value="{{ reward.cost }}" required>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="prompt">Reward Prompt</label>
+            <input type="text" name="prompt" id="prompt" value="{{ reward.prompt }}">
+            <small class="help-text">Text shown to users when redeeming</small>
+        </div>
+
+        <div class="form-group">
+            <label for="background_color">Reward Color</label>
+            <input type="color" name="background_color" id="background_color"
+                   value="{{ reward.background_color }}">
+        </div>
+
+        <div class="form-section">
+            <div class="form-section-title">Refund Behavior</div>
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="sync_cooldown_with_rate_limit"
+                           {% if reward.sync_cooldown_with_rate_limit %}checked{% endif %}>
+                    Sync reward cooldown with TTS rate limit
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="refund_on_queue_full"
+                           {% if reward.refund_on_queue_full %}checked{% endif %}>
+                    Refund when queue is full
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="refund_on_filtered"
+                           {% if reward.refund_on_filtered %}checked{% endif %}>
+                    Refund when message is filtered
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="refund_on_banned_user"
+                           {% if reward.refund_on_banned_user %}checked{% endif %}>
+                    Refund for banned users
+                </label>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button type="submit" class="btn btn-primary">Save Reward Settings</button>
+        </div>
+    </form>
+</div>
+
+<script>
+function showTab(tabId, element) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.style.display = 'none';
+    });
+    // Remove active from all tab links
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    // Show selected tab
+    document.getElementById('tab-' + tabId).style.display = 'block';
+    element.classList.add('active');
+}
+
+// Range slider value updates
+document.querySelectorAll('input[type="range"]').forEach(function(range) {
+    const valueSpan = range.parentElement.querySelector('.range-value');
+    if (valueSpan) {
+        range.addEventListener('input', function() {
+            valueSpan.textContent = this.value;
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - BG3 Narrator{% endblock %}
+
+{% block header %}Narration Logs{% endblock %}
+
+{% block content %}
+<!-- Filter Form -->
+<div class="filter-form">
+    <div class="form-group">
+        <label for="filter-user">User</label>
+        <input type="text" id="filter-user" name="user"
+               value="{{ filters.user or '' }}"
+               placeholder="Filter by username"
+               hx-get="/logs/partials/table"
+               hx-trigger="keyup changed delay:300ms"
+               hx-target="#logs-table"
+               hx-include="[name='status'], [name='date_from'], [name='date_to']">
+    </div>
+
+    <div class="form-group">
+        <label for="filter-status">Status</label>
+        <select id="filter-status" name="status"
+                hx-get="/logs/partials/table"
+                hx-trigger="change"
+                hx-target="#logs-table"
+                hx-include="[name='user'], [name='date_from'], [name='date_to']">
+            <option value="">All</option>
+            <option value="success" {% if filters.status == 'success' %}selected{% endif %}>Success</option>
+            <option value="error" {% if filters.status == 'error' %}selected{% endif %}>Error</option>
+            <option value="filtered" {% if filters.status == 'filtered' %}selected{% endif %}>Filtered</option>
+            <option value="rate_limited" {% if filters.status == 'rate_limited' %}selected{% endif %}>Rate Limited</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="filter-date-from">From</label>
+        <input type="date" id="filter-date-from" name="date_from"
+               value="{{ date_from }}"
+               hx-get="/logs/partials/table"
+               hx-trigger="change"
+               hx-target="#logs-table"
+               hx-include="[name='user'], [name='status'], [name='date_to']">
+    </div>
+
+    <div class="form-group">
+        <label for="filter-date-to">To</label>
+        <input type="date" id="filter-date-to" name="date_to"
+               value="{{ date_to }}"
+               hx-get="/logs/partials/table"
+               hx-trigger="change"
+               hx-target="#logs-table"
+               hx-include="[name='user'], [name='status'], [name='date_from']">
+    </div>
+
+    <a href="/logs" class="btn btn-secondary" style="align-self: flex-end;">Clear Filters</a>
+</div>
+
+<!-- Stats Summary -->
+<div class="grid grid-4" style="margin-bottom: var(--spacing-lg);">
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total_count }}</div>
+        <div class="stat-label">Total</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: var(--success);">{{ stats.success_count }}</div>
+        <div class="stat-label">Success</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: var(--error);">{{ stats.error_count }}</div>
+        <div class="stat-label">Errors</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">
+            {% if stats.avg_total_latency_ms %}
+                {{ "%.0f"|format(stats.avg_total_latency_ms) }}ms
+            {% else %}
+                --
+            {% endif %}
+        </div>
+        <div class="stat-label">Avg Latency</div>
+    </div>
+</div>
+
+<!-- Logs Table -->
+<div class="card">
+    <div id="logs-table">
+        {% include "partials/log_table.html" %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,16 @@
+<div class="worker-status">
+    <div class="status-indicator {% if worker_running %}running{% else %}stopped{% endif %}">
+        <span class="dot"></span>
+        <span>{% if worker_running %}Running{% else %}Stopped{% endif %}</span>
+    </div>
+    {% if pipeline_available %}
+    <button class="btn btn-sm {% if worker_running %}btn-danger{% else %}btn-success{% endif %}"
+            hx-post="/worker/toggle"
+            hx-target="#worker-status-container"
+            hx-swap="innerHTML">
+        {% if worker_running %}Stop{% else %}Start{% endif %}
+    </button>
+    {% else %}
+    <span class="badge badge-warning">No LLM Key</span>
+    {% endif %}
+</div>

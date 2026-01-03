@@ -76,9 +76,25 @@ Providers implement `get_settings_schema()` returning JSON Schema for dynamic We
 - `src/api/websocket.py`: WebSocket connection manager for overlay broadcasts
 - `src/api/ws_types.py`: TypedDict message types for WebSocket protocol
 - `src/api/routes/overlay.py`: WebSocket endpoint (`/ws/overlay`) and static file serving
-- `src/views/`: HTMX endpoints returning HTML partials
-- `src/templates/`: Jinja2 templates with HTMX
 - `overlay/`: OBS Browser Source (HTML/CSS/JS) connecting via WebSocket
+
+### Web UI (Phase 4)
+- `src/views/`: HTMX view routes returning HTML pages/partials
+  - `dashboard.py`: Main dashboard with queue status, worker control
+  - `settings.py`: Settings forms (language, narrator, queue, overlay, reward)
+  - `queue.py`: Queue management (view, skip, clear)
+  - `test.py`: Manual narration testing
+  - `logs.py`: Narration history with filtering/pagination
+- `src/templates/`: Jinja2 templates
+  - `base.html`: Base layout with BG3-themed sidebar
+  - `pages/`: Full page templates (dashboard, settings, queue, test, logs)
+  - `partials/`: HTMX partial templates for live updates
+- `src/static/`: Static assets
+  - `css/main.css`: BG3 theme (dark parchment, gold accents)
+  - `css/components.css`: Reusable component styles
+  - `js/htmx.min.js`: HTMX 2.0.4 bundled locally
+  - `js/app.js`: WebSocket integration for live updates
+- `src/db/repositories/narration_log.py`: Narration history logging
 
 ## Type Safety Requirements
 
@@ -87,8 +103,9 @@ Providers implement `get_settings_schema()` returning JSON Schema for dynamic We
 - TypedDict for WebSocket message types
 - No `Any` types - explicit types everywhere
 - mypy strict mode enforced in CI
-- ty additionally for typechecks
-- no '# type: ignore' without implicit asking and additional extended comment to explain why.
+- ty (Ruff's type checker) additionally for stricter checks
+- Use `# ty: ignore[rule-name]` for ty-specific suppressions (doesn't trigger mypy unused-ignore)
+- No `# type: ignore` without explicit asking and extended comment explaining why
 
 ## Fail fast and LOUD
 Never do `except Exception:`. Always narrow down the exception type and handle it properly.
@@ -116,6 +133,23 @@ Required env vars: `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_CHANNEL`,
 ## Testing
 
 Tests in `tests/` directory mirror `src/` structure. Use `pytest-asyncio` for async tests. Coverage target: 80%.
+
+## Web UI
+
+The web dashboard is served at `http://localhost:8000` with the following pages:
+
+| Route | Description |
+|-------|-------------|
+| `/` | Dashboard with queue status, worker control |
+| `/settings` | Configuration for language, narrator, queue, overlay, rewards |
+| `/queue` | Queue management (view, skip, clear items) |
+| `/test` | Manual narration testing |
+| `/logs` | Narration history with filtering |
+
+HTMX patterns used:
+- `hx-post` for form submissions with toast responses
+- `hx-get` with `hx-trigger="every 1s"` for live polling
+- `hx-trigger="refresh from:body"` for WebSocket-triggered updates
 
 ## OBS Overlay
 

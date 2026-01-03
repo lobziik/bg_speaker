@@ -2,14 +2,20 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from src.api.dependencies import get_app_state
 from src.api.routes import health, overlay, test, twitch
 from src.api.websocket import get_websocket_manager
+
+# Paths for static files and templates
+STATIC_PATH = Path(__file__).parent.parent / "static"
+TEMPLATES_PATH = Path(__file__).parent.parent / "templates"
 
 logger = structlog.get_logger()
 
@@ -48,6 +54,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             pipeline=state.pipeline,
             ws_manager=ws_manager,
             rewards_controller=state.twitch_rewards,
+            db_connection=state.db.connection,
         )
 
         await state.worker.start()
@@ -80,16 +87,29 @@ def create_app() -> FastAPI:
 
     # CORS for OBS overlay
     app.add_middleware(
-        CORSMiddleware,
+        CORSMiddleware,  # ty: ignore[invalid-argument-type]
         allow_origins=["*"],
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    # Include routers
+    # Mount static files
+    if STATIC_PATH.exists():
+        app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
+
+    # Include API routers
     app.include_router(health.router, tags=["Health"])
     app.include_router(twitch.router, prefix="/auth", tags=["Twitch OAuth"])
     app.include_router(test.router, prefix="/api", tags=["Test"])
     app.include_router(overlay.router, tags=["Overlay"])
+
+    # Include view routers (Web UI)
+    from src.views import dashboard, logs, queue, settings, test as test_view
+
+    app.include_router(dashboard.router, tags=["Views"])
+    app.include_router(settings.router, tags=["Views"])
+    app.include_router(queue.router, tags=["Views"])
+    app.include_router(test_view.router, tags=["Views"])
+    app.include_router(logs.router, tags=["Views"])
 
     return app

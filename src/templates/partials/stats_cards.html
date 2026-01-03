@@ -1,0 +1,27 @@
+<div class="stat-card">
+    <div class="stat-value queue-count">{{ queue_length }}</div>
+    <div class="stat-label">In Queue</div>
+</div>
+
+<div class="stat-card">
+    <div class="stat-value tts-countdown {% if rate_status.tts_available %}ready{% endif %}">
+        {% if rate_status.tts_available %}
+            Ready
+        {% elif rate_status.tts_available_in_seconds is not none %}
+            {{ "%.1f"|format(rate_status.tts_available_in_seconds) }}s
+        {% else %}
+            Waiting
+        {% endif %}
+    </div>
+    <div class="stat-label">TTS Status</div>
+</div>
+
+<div class="stat-card">
+    <div class="stat-value">{{ rate_status.tts_rate_limit_seconds }}s</div>
+    <div class="stat-label">Rate Limit</div>
+</div>
+
+<div class="stat-card">
+    <div class="stat-value">{{ rate_status.active_user_cooldowns }}</div>
+    <div class="stat-label">User Cooldowns</div>
+</div>

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Queue - BG3 Narrator{% endblock %}
+
+{% block header %}Queue Management{% endblock %}
+
+{% block header_actions %}
+<div class="btn-group">
+    <button class="btn btn-danger btn-sm"
+            hx-delete="/queue"
+            hx-target="#queue-list"
+            hx-swap="innerHTML"
+            hx-confirm="Clear all items from queue?">
+        Clear All
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-2">
+    <div class="card">
+        <div class="card-header">Rate Limit Status</div>
+        <div id="rate-limit-display"
+             hx-get="/partials/rate-limit-status"
+             hx-trigger="every 1s"
+             hx-swap="innerHTML">
+            {% include "partials/rate_limit_status.html" %}
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-value queue-count">{{ queue_items | length }}</div>
+        <div class="stat-label">Items in Queue</div>
+    </div>
+</div>
+
+<div class="card" style="margin-top: var(--spacing-lg);">
+    <div class="card-header">Queue Items</div>
+    <div id="queue-list"
+         hx-get="/queue/partials/queue-list"
+         hx-trigger="refresh from:body"
+         hx-swap="innerHTML">
+        {% include "partials/queue_list.html" %}
+    </div>
+</div>
+{% endblock %}

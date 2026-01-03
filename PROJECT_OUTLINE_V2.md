@@ -2736,24 +2736,24 @@ overlay.startPingInterval();
 ### Phase 2: Twitch Integration (Week 2)
 
 **Tasks:**
-1. [ ] TwitchIO 3.x EventSub setup
-2. [ ] Twitch OAuth flow
-3. [ ] Redemption validation and parsing
-4. [ ] Message queue with asyncio
-5. [ ] User cooldown tracking
-6. [ ] Integration tests
+1. [x] TwitchIO 3.x EventSub setup
+2. [x] Twitch OAuth flow
+3. [x] Redemption validation and parsing
+4. [x] Message queue with asyncio
+5. [x] User cooldown tracking
+6. [x] Integration tests
 
 **Deliverable:** Bot connects to Twitch and queues redemptions
 
 ### Phase 3: WebSocket & Overlay (Week 3)
 
 **Tasks:**
-1. [ ] FastAPI WebSocket endpoint
-2. [ ] Audio streaming over WebSocket
-3. [ ] OBS overlay HTML/CSS/JS
-4. [ ] Subtitle synchronization
-5. [ ] Reconnection handling
-6. [ ] End-to-end tests
+1. [x] FastAPI WebSocket endpoint
+2. [x] Audio streaming over WebSocket
+3. [x] OBS overlay HTML/CSS/JS
+4. [x] Subtitle synchronization
+5. [x] Reconnection handling
+6. [x] End-to-end tests
 
 **Deliverable:** Working overlay in OBS with audio + subtitles
 

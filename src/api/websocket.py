@@ -265,16 +265,16 @@ class WebSocketManager:
             event: Queue event that triggered update.
             items: Current queue items.
         """
-        item_data: list[QueueItemData] = [
-            {
+        item_data: list[QueueItemData] = []
+        for i, item in enumerate(items):
+            queue_item: QueueItemData = {
                 "id": item.id,
                 "user": item.user,
                 "message": item.message,
                 "position": i + 1,
                 "priority": item.priority,
             }
-            for i, item in enumerate(items)
-        ]
+            item_data.append(queue_item)
 
         message: QueueUpdateMessage = {
             "type": "queue_update",

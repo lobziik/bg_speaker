@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}BG3 Narrator{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <script src="/static/js/htmx.min.js"></script>
+    <script src="/static/js/app.js" defer></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=IM+Fell+English+SC&display=swap" rel="stylesheet">
+    {% block head %}{% endblock %}
+</head>
+<body hx-headers='{"X-Requested-With": "htmx"}'>
+    <nav class="sidebar">
+        <div class="logo">BG3 Narrator</div>
+        <ul class="nav-links">
+            <li>
+                <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
+                    <span>Dashboard</span>
+                </a>
+            </li>
+            <li>
+                <a href="/settings" class="{% if active_page == 'settings' %}active{% endif %}">
+                    <span>Settings</span>
+                </a>
+            </li>
+            <li>
+                <a href="/queue" class="{% if active_page == 'queue' %}active{% endif %}">
+                    <span>Queue</span>
+                </a>
+            </li>
+            <li>
+                <a href="/test" class="{% if active_page == 'test' %}active{% endif %}">
+                    <span>Test</span>
+                </a>
+            </li>
+            <li>
+                <a href="/logs" class="{% if active_page == 'logs' %}active{% endif %}">
+                    <span>Logs</span>
+                </a>
+            </li>
+        </ul>
+        <div class="connection-status" id="ws-status">
+            <span class="status-dot"></span>
+            <span class="status-text">Connecting...</span>
+        </div>
+    </nav>
+
+    <main class="content">
+        <header class="page-header">
+            <h1>{% block header %}{% endblock %}</h1>
+            <div class="header-actions">
+                {% block header_actions %}{% endblock %}
+            </div>
+        </header>
+        <section class="page-content">
+            {% block content %}{% endblock %}
+        </section>
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script>
+        // Toast handler for HTMX responses
+        document.body.addEventListener('showToast', function(e) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + (e.detail.type || 'success');
+            toast.textContent = e.detail.message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        });
+
+        // Handle HX-Trigger response headers for toasts
+        document.body.addEventListener('htmx:afterRequest', function(e) {
+            const trigger = e.detail.xhr.getResponseHeader('HX-Trigger');
+            if (trigger) {
+                try {
+                    const parsed = JSON.parse(trigger);
+                    if (parsed.showToast) {
+                        document.body.dispatchEvent(new CustomEvent('showToast', {
+                            detail: parsed.showToast
+                        }));
+                    }
+                } catch (err) {
+                    // Not JSON, ignore
+                }
+            }
+        });
+
+        // Range slider value display
+        document.querySelectorAll('input[type="range"]').forEach(function(range) {
+            const valueSpan = range.parentElement.querySelector('.range-value');
+            if (valueSpan) {
+                range.addEventListener('input', function() {
+                    valueSpan.textContent = this.value;
+                });
+            }
+        });
+
+        // Character counter for textareas
+        document.querySelectorAll('textarea[data-max-length]').forEach(function(textarea) {
+            const counter = textarea.parentElement.querySelector('.char-counter');
+            const maxLength = parseInt(textarea.dataset.maxLength);
+            if (counter) {
+                textarea.addEventListener('input', function() {
+                    const len = this.value.length;
+                    counter.textContent = len + ' / ' + maxLength;
+                    counter.classList.toggle('warning', len > maxLength * 0.8);
+                    counter.classList.toggle('error', len > maxLength);
+                });
+            }
+        });
+    </script>
+</body>
+</html>
