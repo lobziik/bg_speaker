@@ -21,28 +21,39 @@ class LanguageCode(StrEnum):
 
     RU = "ru"
     EN = "en"
-    DE = "de"
-    FR = "fr"
-    ES = "es"
 
 
 class NarrationRequest(StrictModel):
-    """Request for narration processing."""
+    """Request for narration processing.
+
+    Attributes:
+        user: Twitch username.
+        message: Original chat message.
+        style: Narrator style to apply.
+    """
 
     user: str = Field(min_length=1, max_length=50)
     message: str = Field(min_length=1, max_length=300)
     style: NarratorStyle = NarratorStyle.DEFAULT
-    source_lang: LanguageCode = LanguageCode.RU
 
 
 class NarrationResult(StrictModel):
-    """Result of narration processing."""
+    """Result of narration processing.
+
+    Attributes:
+        id: Unique narration ID.
+        user: Username who triggered narration.
+        voice_text: Text used for TTS synthesis (in narrator_lang).
+        subtitle_text: Text for subtitles (in subtitle_lang).
+        target_lang: Language used for TTS.
+        audio_data: Synthesized audio bytes.
+        duration_ms: Audio duration in milliseconds.
+    """
 
     id: str
     user: str
-    text_original: str  # Original formatted text
-    text_translated: str  # Translated (or same if no translation needed)
+    voice_text: str
+    subtitle_text: str
     target_lang: LanguageCode
     audio_data: bytes
     duration_ms: int
-    was_translated: bool  # False if source == target language

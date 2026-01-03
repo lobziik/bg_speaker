@@ -17,7 +17,7 @@ from src.api.websocket import WebSocketManager
 from src.db.repositories.narration_log import NarrationLogRepository
 from src.db.repositories.settings import SettingsRepository
 from src.models.narration import LanguageCode, NarrationRequest, NarrationResult
-from src.models.settings import LanguageSettings, NarratorSettings
+from src.models.settings import LanguageSettings, NarratorSettings, TTSVoiceSettings
 from src.services.pipeline import NarrationPipeline
 from src.services.queue import NarrationQueue, QueueItem
 
@@ -131,18 +131,21 @@ class QueueWorker:
         try:
             # Load settings from database
             bypass_llm = False
+            auto_translate = True
             narrator_lang = LanguageCode.EN
-            source_lang = LanguageCode.EN
+            subtitle_lang = LanguageCode.EN
+            voice_id: str | None = None
 
             if self._db_connection:
                 settings_repo = SettingsRepository(self._db_connection)
 
-                # Load narrator settings to check bypass mode
+                # Load narrator settings (bypass mode and auto_translate)
                 narrator_settings = await settings_repo.get(
                     "narrator", NarratorSettings, NarratorSettings()
                 )
                 if narrator_settings:
                     bypass_llm = narrator_settings.bypass_llm
+                    auto_translate = narrator_settings.auto_translate
 
                 # Load language settings for TTS voice selection
                 language_settings = await settings_repo.get(
@@ -150,7 +153,15 @@ class QueueWorker:
                 )
                 if language_settings:
                     narrator_lang = language_settings.narrator_lang
-                    source_lang = language_settings.source_lang
+                    subtitle_lang = language_settings.subtitle_lang
+
+                # Load TTS voice settings for per-language voice overrides
+                tts_voice_settings = await settings_repo.get(
+                    "tts_voice", TTSVoiceSettings, TTSVoiceSettings()
+                )
+                if tts_voice_settings:
+                    # Get voice override for narrator language (if set)
+                    voice_id = tts_voice_settings.voice_overrides.get(narrator_lang)
 
             # Create narration request
             request = NarrationRequest(
@@ -158,11 +169,14 @@ class QueueWorker:
                 message=item.message,
             )
 
-            # Process through pipeline with target language
+            # Process through pipeline with language and voice parameters
             result, metrics = await self._pipeline.process(
                 request,
-                target_lang=narrator_lang,
+                narrator_lang=narrator_lang,
+                subtitle_lang=subtitle_lang,
+                auto_translate=auto_translate,
                 bypass_llm=bypass_llm,
+                voice_id=voice_id,
             )
 
             # Broadcast to WebSocket clients
@@ -176,8 +190,8 @@ class QueueWorker:
                 item=item,
                 result=result,
                 status="success",
-                source_lang=source_lang.value,
-                target_lang=narrator_lang.value,
+                narrator_lang=narrator_lang.value,
+                subtitle_lang=subtitle_lang.value,
                 llm_latency_ms=metrics.llm_latency_ms,
                 tts_latency_ms=metrics.tts_latency_ms,
                 total_latency_ms=metrics.llm_latency_ms + metrics.tts_latency_ms,
@@ -254,8 +268,8 @@ class QueueWorker:
         item: QueueItem,
         result: NarrationResult | None,
         status: str,
-        source_lang: str = "en",
-        target_lang: str = "en",
+        narrator_lang: str = "en",
+        subtitle_lang: str = "en",
         llm_latency_ms: int | None = None,
         tts_latency_ms: int | None = None,
         total_latency_ms: int | None = None,
@@ -267,8 +281,8 @@ class QueueWorker:
             item: The queue item being processed.
             result: The narration result (if successful).
             status: Status of the narration (success, error, etc.).
-            source_lang: Source language code.
-            target_lang: Target language code.
+            narrator_lang: Language for TTS output.
+            subtitle_lang: Language for subtitles.
             llm_latency_ms: LLM processing time.
             tts_latency_ms: TTS processing time.
             total_latency_ms: Total processing time.
@@ -283,12 +297,11 @@ class QueueWorker:
                 id=result.id if result else item.id,
                 user=item.user,
                 message_original=item.message,
-                text_formatted=result.text_original if result else None,
-                text_translated=result.text_translated if result else None,
-                was_translated=result.was_translated if result else False,
+                voice_text=result.voice_text if result else None,
+                subtitle_text=result.subtitle_text if result else None,
                 status=status,
-                source_lang=source_lang,
-                target_lang=target_lang,
+                narrator_lang=narrator_lang,
+                subtitle_lang=subtitle_lang,
                 llm_provider="groq",  # TODO: Get from pipeline
                 tts_provider="piper",  # TODO: Get from pipeline
                 latency_llm_ms=llm_latency_ms,
@@ -315,11 +328,11 @@ class QueueWorker:
             result: The narration result to broadcast.
         """
 
-        # 1. Send narration start
+        # 1. Send narration start with subtitle_text for overlay display
         await self._ws_manager.broadcast_narration_start(
             narration_id=result.id,
             user=result.user,
-            text=result.text_original,
+            text=result.subtitle_text,
         )
 
         # 2. Send audio data

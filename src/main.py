@@ -181,7 +181,7 @@ async def run_pipeline(
 
     logger.info(
         "Narration complete",
-        text=result.text_original,
+        voice_text=result.voice_text,
         duration_ms=result.duration_ms,
         llm_latency_ms=metrics.llm_latency_ms,
         tts_latency_ms=metrics.tts_latency_ms,
@@ -198,7 +198,7 @@ async def run_pipeline(
     # Print the formatted text
     print("\n" + "=" * 60)
     print("NARRATOR:")
-    print(result.text_original)
+    print(result.voice_text)
     print("=" * 60)
     print(f"\nAudio saved to: {output_path}")
     print(f"Duration: {result.duration_ms}ms")

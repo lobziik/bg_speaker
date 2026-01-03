@@ -266,8 +266,7 @@ class TestPiperLanguageVoiceSelection:
     def test_language_default_voices_mapping(self) -> None:
         """Test that all supported languages have default voices."""
         # All language codes should have a default voice
-        for lang in [LanguageCode.EN, LanguageCode.RU, LanguageCode.DE,
-                     LanguageCode.FR, LanguageCode.ES]:
+        for lang in [LanguageCode.EN, LanguageCode.RU]:
             assert lang in LANGUAGE_DEFAULT_VOICES
             voice_id = LANGUAGE_DEFAULT_VOICES[lang]
             # Voice ID should be valid format
@@ -280,9 +279,6 @@ class TestPiperLanguageVoiceSelection:
 
         assert provider.get_voice_for_language(LanguageCode.EN) == "en_US-lessac-medium"
         assert provider.get_voice_for_language(LanguageCode.RU) == "ru_RU-ruslan-medium"
-        assert provider.get_voice_for_language(LanguageCode.DE) == "de_DE-thorsten-medium"
-        assert provider.get_voice_for_language(LanguageCode.FR) == "fr_FR-siwis-medium"
-        assert provider.get_voice_for_language(LanguageCode.ES) == "es_ES-davefx-medium"
 
     def test_get_voice_for_language_uses_override(self) -> None:
         """Should prefer user override over default."""
@@ -306,8 +302,6 @@ class TestPiperLanguageVoiceSelection:
 
         assert provider.get_voice_for_language(LanguageCode.EN) == "en_US-ryan-medium"
         assert provider.get_voice_for_language(LanguageCode.RU) == "ru_RU-irina-medium"
-        # DE should use default
-        assert provider.get_voice_for_language(LanguageCode.DE) == "de_DE-thorsten-medium"
 
     def test_get_voices_for_language_filters_correctly(self) -> None:
         """Should return only voices matching the language."""

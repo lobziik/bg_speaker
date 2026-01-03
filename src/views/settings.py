@@ -106,10 +106,8 @@ async def save_language_settings(
     form_data = await request.form()
 
     settings = LanguageSettings(
-        source_lang=LanguageCode(str(form_data["source_lang"])),
         narrator_lang=LanguageCode(str(form_data["narrator_lang"])),
         subtitle_lang=LanguageCode(str(form_data["subtitle_lang"])),
-        auto_translate=form_data.get("auto_translate") == "on",
     )
 
     await settings_repo.set("language", settings)
@@ -132,6 +130,7 @@ async def save_narrator_settings(
         default_style=NarratorStyle(str(form_data["default_style"])),
         system_prompt=str(form_data.get("system_prompt", "")),
         bypass_llm=form_data.get("bypass_llm") == "on",
+        auto_translate=form_data.get("auto_translate") == "on",
     )
 
     await settings_repo.set("narrator", settings)

@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, ClassVar
 
 import structlog
 from groq import APIConnectionError, APIStatusError, AsyncGroq
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
-from src.providers.llm.base import LLMProvider, LLMResponse, Model
+from src.providers.llm.base import (
+    LLMNarrationResponse,
+    LLMProvider,
+    LLMResponse,
+    LLMResponseParseError,
+    Model,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -16,6 +23,9 @@ if TYPE_CHECKING:
     from groq.types.chat import (
         ChatCompletionSystemMessageParam,
         ChatCompletionUserMessageParam,
+    )
+    from groq.types.chat.completion_create_params import (
+        ResponseFormatResponseFormatJsonObject,
     )
 
 logger = structlog.get_logger()
@@ -97,26 +107,37 @@ class GroqLLMProvider:
         """Generate narrator text from user message.
 
         Args:
-            user: Twitch username
-            message: Original message
-            system_prompt: System prompt for the LLM
-            style: Narrator style template name
+            user: Twitch username.
+            message: Original message.
+            system_prompt: Complete system prompt including JSON format instructions.
+            style: Narrator style template name.
 
         Returns:
-            LLMResponse with formatted text
-        """
-        logger.debug(
-            "groq_generation_start",
-            user=user,
-            model=self._model,
-            style=style,
-            input_length=len(message),
-        )
+            LLMResponse with voice_text and subtitle_text.
 
+        Raises:
+            LLMResponseParseError: If response is not valid JSON or missing fields.
+        """
         user_content = f"[{user}]: {message}"
 
         if style != "default":
             user_content = f"[Style: {style}] {user_content}"
+
+        # Log prompt metadata at INFO level
+        logger.info(
+            "llm_prompt",
+            user=user,
+            model=self._model,
+            style=style,
+            message_preview=message[:50] if len(message) > 50 else message,
+            system_prompt_length=len(system_prompt),
+        )
+        # Log full system prompt at DEBUG level
+        logger.debug(
+            "llm_system_prompt_full",
+            system_prompt=system_prompt,
+            user_content=user_content,
+        )
 
         try:
             system_msg: ChatCompletionSystemMessageParam = {
@@ -127,11 +148,13 @@ class GroqLLMProvider:
                 "role": "user",
                 "content": user_content,
             }
+            json_format: ResponseFormatResponseFormatJsonObject = {"type": "json_object"}
             response = await self._client.chat.completions.create(
                 model=self._model,
                 messages=[system_msg, user_msg],
                 temperature=self._temperature,
                 max_tokens=self._max_tokens,
+                response_format=json_format,
             )
         except APIConnectionError as e:
             logger.error("groq_connection_error", user=user, error=str(e))
@@ -145,19 +168,53 @@ class GroqLLMProvider:
             )
             raise
 
-        text = response.choices[0].message.content or ""
+        raw_text = response.choices[0].message.content or ""
 
+        # Log raw response at DEBUG level
         logger.debug(
-            "groq_generation_complete",
+            "llm_raw_response",
+            user=user,
+            raw_response=raw_text,
+        )
+
+        # Parse and validate JSON response
+        try:
+            parsed = json.loads(raw_text)
+            narration = LLMNarrationResponse.model_validate(parsed)
+        except json.JSONDecodeError as e:
+            logger.error(
+                "llm_json_parse_error",
+                user=user,
+                raw_response=raw_text,
+                error=str(e),
+            )
+            raise LLMResponseParseError(raw_text, f"Invalid JSON: {e}") from e
+        except ValidationError as e:
+            logger.error(
+                "llm_validation_error",
+                user=user,
+                raw_response=raw_text,
+                error=str(e),
+            )
+            raise LLMResponseParseError(raw_text, f"Missing required fields: {e}") from e
+
+        voice_text = narration.voice_text.strip()
+        subtitle_text = narration.subtitle_text.strip()
+
+        # Log response at INFO level
+        logger.info(
+            "llm_response",
             user=user,
             model=self._model,
-            input_length=len(message),
-            output_length=len(text),
+            voice_text_length=len(voice_text),
+            subtitle_text_length=len(subtitle_text),
+            voice_text_preview=voice_text[:50] if len(voice_text) > 50 else voice_text,
         )
 
         return LLMResponse(
-            text=text.strip(),
-            raw_response=str(response),
+            voice_text=voice_text,
+            subtitle_text=subtitle_text,
+            raw_response=raw_text,
         )
 
     async def generate_stream(

@@ -22,18 +22,6 @@
           hx-swap="innerHTML">
         <div class="form-row">
             <div class="form-group">
-                <label for="source_lang">Source Language</label>
-                <select name="source_lang" id="source_lang">
-                    {% for code in language_codes %}
-                    <option value="{{ code.value }}" {% if language.source_lang == code %}selected{% endif %}>
-                        {{ code.value | upper }}
-                    </option>
-                    {% endfor %}
-                </select>
-                <small class="help-text">Language of incoming chat messages</small>
-            </div>
-
-            <div class="form-group">
                 <label for="narrator_lang">Narrator Language</label>
                 <select name="narrator_lang" id="narrator_lang">
                     {% for code in language_codes %}
@@ -42,7 +30,7 @@
                     </option>
                     {% endfor %}
                 </select>
-                <small class="help-text">Language for TTS output</small>
+                <small class="help-text">Language for TTS voice output</small>
             </div>
 
             <div class="form-group">
@@ -56,14 +44,6 @@
                 </select>
                 <small class="help-text">Language for overlay subtitles</small>
             </div>
-        </div>
-
-        <div class="form-group">
-            <label class="checkbox-label">
-                <input type="checkbox" name="auto_translate" {% if language.auto_translate %}checked{% endif %}>
-                Enable automatic translation
-            </label>
-            <small class="help-text">Translate messages when source and narrator languages differ</small>
         </div>
 
         <div class="btn-group">
@@ -121,6 +101,17 @@
         </div>
 
         <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" name="auto_translate" {% if narrator.auto_translate %}checked{% endif %}>
+                Enable automatic translation
+            </label>
+            <small class="help-text">
+                When enabled and languages differ, the narrator voice uses Narrator Language
+                while subtitles use Subtitle Language. When disabled, both use Narrator Language.
+            </small>
+        </div>
+
+        <div class="form-group">
             <label for="default_style">Default Style</label>
             <select name="default_style" id="default_style">
                 {% for style in narrator_styles %}
@@ -136,7 +127,7 @@
             <label for="system_prompt">Custom System Prompt</label>
             <textarea name="system_prompt" id="system_prompt" rows="6"
                       placeholder="Leave empty to use default D&D narrator prompt">{{ narrator.system_prompt }}</textarea>
-            <small class="help-text">Override the default narrator personality prompt</small>
+            <small class="help-text">Additional instructions for the narrator (added to the base prompt)</small>
         </div>
 
         <div class="btn-group">

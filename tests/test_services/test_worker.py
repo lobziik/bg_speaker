@@ -43,13 +43,12 @@ def mock_pipeline() -> MagicMock:
     sample_result = NarrationResult(
         id="test-result-123",
         user="TestUser",
-        text_original="The adventurer speaks with great enthusiasm!",
-        text_translated="The adventurer speaks with great enthusiasm!",
+        voice_text="The adventurer speaks with great enthusiasm!",
+        subtitle_text="The adventurer speaks with great enthusiasm!",
         target_lang=LanguageCode.EN,
         audio_data=b"RIFF\x00\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00"
         b"\x22\x56\x00\x00D\xac\x00\x00\x02\x00\x10\x00data\x00\x00\x00\x00",
         duration_ms=1000,
-        was_translated=False,
     )
     sample_metrics = PipelineMetrics(
         llm_latency_ms=100,
@@ -161,11 +160,11 @@ class TestWorkerProcessing:
 
         await worker.stop()
 
-        # Pipeline should have been called with target_lang
+        # Pipeline should have been called with narrator_lang
         mock_pipeline.process.assert_called_once()
         call_args = mock_pipeline.process.call_args
         # Default language when no DB is EN
-        assert call_args.kwargs.get("target_lang") == LanguageCode.EN
+        assert call_args.kwargs.get("narrator_lang") == LanguageCode.EN
 
     @pytest.mark.asyncio
     async def test_process_broadcasts_narration_start(
@@ -212,12 +211,11 @@ class TestWorkerProcessing:
         fast_result = NarrationResult(
             id="test-result",
             user="User",
-            text_original="Text",
-            text_translated="Text",
+            voice_text="Text",
+            subtitle_text="Text",
             target_lang=LanguageCode.EN,
             audio_data=b"audio",
             duration_ms=10,  # Very short duration
-            was_translated=False,
         )
         fast_metrics = PipelineMetrics(
             llm_latency_ms=1,
@@ -293,12 +291,11 @@ class TestWorkerErrorHandling:
         sample_result = NarrationResult(
             id="result-123",
             user="User",
-            text_original="Text",
-            text_translated="Text",
+            voice_text="Text",
+            subtitle_text="Text",
             target_lang=LanguageCode.EN,
             audio_data=b"audio",
             duration_ms=100,
-            was_translated=False,
         )
         sample_metrics = PipelineMetrics(
             llm_latency_ms=10,
@@ -356,12 +353,11 @@ class TestWorkerWithRewards:
         fast_result = NarrationResult(
             id="test-result",
             user="User",
-            text_original="Text",
-            text_translated="Text",
+            voice_text="Text",
+            subtitle_text="Text",
             target_lang=LanguageCode.EN,
             audio_data=b"audio",
             duration_ms=10,
-            was_translated=False,
         )
         fast_metrics = PipelineMetrics(
             llm_latency_ms=1,

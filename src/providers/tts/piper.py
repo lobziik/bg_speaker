@@ -21,10 +21,7 @@ logger = structlog.get_logger()
 # Users can override these via TTSVoiceSettings.
 LANGUAGE_DEFAULT_VOICES: dict[LanguageCode, str] = {
     LanguageCode.EN: "en_US-lessac-medium",
-    LanguageCode.RU: "ru_RU-ruslan-medium",
-    LanguageCode.DE: "de_DE-thorsten-medium",
-    LanguageCode.FR: "fr_FR-siwis-medium",
-    LanguageCode.ES: "es_ES-davefx-medium",
+    LanguageCode.RU: "ru_RU-ruslan-medium"
 }
 
 
@@ -260,25 +257,7 @@ DEFAULT_VOICES = [
         name="Irina (Russian)",
         language="ru",
         preview_url="https://rhasspy.github.io/piper-samples/samples/ru/ru_RU/irina/medium/sample.mp3",
-    ),
-    Voice(
-        id="de_DE-thorsten-medium",
-        name="Thorsten (German)",
-        language="de",
-        preview_url="https://rhasspy.github.io/piper-samples/samples/de/de_DE/thorsten/medium/sample.mp3",
-    ),
-    Voice(
-        id="fr_FR-siwis-medium",
-        name="Siwis (French)",
-        language="fr",
-        preview_url="https://rhasspy.github.io/piper-samples/samples/fr/fr_FR/siwis/medium/sample.mp3",
-    ),
-    Voice(
-        id="es_ES-davefx-medium",
-        name="Davefx (Spanish)",
-        language="es",
-        preview_url="https://rhasspy.github.io/piper-samples/samples/es/es_ES/davefx/medium/sample.mp3",
-    ),
+    )
 ]
 
 

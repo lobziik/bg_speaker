@@ -33,11 +33,13 @@ class TestLLMProviderProtocol:
     def test_llm_response_dataclass(self) -> None:
         """Test LLMResponse dataclass."""
         response = LLMResponse(
-            text="The hero speaks!",
-            raw_response='{"choices": [...]}',
+            voice_text="The hero speaks!",
+            subtitle_text="The hero speaks!",
+            raw_response='{"voice_text": "The hero speaks!", "subtitle_text": "The hero speaks!"}',
         )
-        assert response.text == "The hero speaks!"
-        assert "choices" in response.raw_response
+        assert response.voice_text == "The hero speaks!"
+        assert response.subtitle_text == "The hero speaks!"
+        assert "voice_text" in response.raw_response
 
 
 class TestGroqLLMProvider:
@@ -93,12 +95,17 @@ class TestGroqLLMProvider:
         sample_system_prompt: str,
     ) -> None:
         """Test successful generation with mocked API."""
+        import json
+
         provider = GroqLLMProvider(api_key=mock_api_key)
 
-        # Mock the Groq client response
+        # Mock the Groq client response with JSON format
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "The hero speaks with valor!"
+        mock_response.choices[0].message.content = json.dumps({
+            "voice_text": "The hero speaks with valor!",
+            "subtitle_text": "The hero speaks with valor!",
+        })
 
         with patch.object(
             provider._client.chat.completions, "create", new_callable=AsyncMock
@@ -112,7 +119,8 @@ class TestGroqLLMProvider:
             )
 
             assert isinstance(result, LLMResponse)
-            assert result.text == "The hero speaks with valor!"
+            assert result.voice_text == "The hero speaks with valor!"
+            assert result.subtitle_text == "The hero speaks with valor!"
             mock_create.assert_called_once()
 
     @pytest.mark.asyncio
@@ -124,11 +132,16 @@ class TestGroqLLMProvider:
         sample_system_prompt: str,
     ) -> None:
         """Test generation with custom style."""
+        import json
+
         provider = GroqLLMProvider(api_key=mock_api_key)
 
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "A whisper in the dark..."
+        mock_response.choices[0].message.content = json.dumps({
+            "voice_text": "A whisper in the dark...",
+            "subtitle_text": "A whisper in the dark...",
+        })
 
         with patch.object(
             provider._client.chat.completions, "create", new_callable=AsyncMock

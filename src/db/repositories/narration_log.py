@@ -71,11 +71,10 @@ class NarrationLogRepository:
         user: str,
         message_original: str,
         status: str,
-        source_lang: str,
-        target_lang: str,
-        text_formatted: str | None = None,
-        text_translated: str | None = None,
-        was_translated: bool = False,
+        narrator_lang: str,
+        subtitle_lang: str,
+        voice_text: str | None = None,
+        subtitle_text: str | None = None,
         llm_provider: str | None = None,
         tts_provider: str | None = None,
         latency_llm_ms: int | None = None,
@@ -92,11 +91,10 @@ class NarrationLogRepository:
             user: Username who requested narration.
             message_original: Original message text.
             status: Status of the narration (success, error, filtered, etc.).
-            source_lang: Source language code.
-            target_lang: Target language code.
-            text_formatted: LLM-formatted narrator text.
-            text_translated: Translated text (if translation was needed).
-            was_translated: Whether translation was performed.
+            narrator_lang: Language for TTS output.
+            subtitle_lang: Language for subtitles.
+            voice_text: Text used for TTS synthesis.
+            subtitle_text: Text displayed in subtitles.
             llm_provider: Name of LLM provider used.
             tts_provider: Name of TTS provider used.
             latency_llm_ms: LLM processing time in milliseconds.
@@ -106,6 +104,8 @@ class NarrationLogRepository:
             rejection_reason: Reason for rejection (if filtered/rate limited).
             error_message: Error message (if failed).
         """
+        # Map to existing DB columns for backward compatibility
+        # DB columns: text_formatted, text_translated, source_lang, target_lang
         await self._conn.execute(
             """
             INSERT INTO narration_log (
@@ -120,11 +120,11 @@ class NarrationLogRepository:
                 id,
                 user,
                 message_original,
-                text_formatted,
-                text_translated,
-                source_lang,
-                target_lang,
-                was_translated,
+                voice_text,  # stored as text_formatted
+                subtitle_text,  # stored as text_translated
+                narrator_lang,  # stored as source_lang (reused column)
+                subtitle_lang,  # stored as target_lang (reused column)
+                narrator_lang != subtitle_lang,  # computed was_translated
                 llm_provider,
                 tts_provider,
                 latency_llm_ms,

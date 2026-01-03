@@ -8,28 +8,10 @@ import structlog
 
 from src.models.narration import LanguageCode, NarrationRequest, NarrationResult
 from src.providers.llm.base import LLMProvider
+from src.providers.llm.prompts import build_system_prompt
 from src.providers.tts.base import TTSProvider
 
 logger = structlog.get_logger()
-
-
-# Default narrator system prompt
-DEFAULT_NARRATOR_PROMPT = """\
-You are the narrator from Baldur's Gate 3, speaking in a dramatic, evocative style.
-
-Transform the user's message into narrative prose as if describing events in a D&D campaign.
-- Use vivid, atmospheric language
-- Keep responses concise (1-3 sentences)
-- Refer to the user by their name in third person
-- Add dramatic flair without being over-the-top
-- Match the tone to the message content
-
-Examples:
-- Casual: "[Username] leans back with a knowing smile, eyes glinting with mischief."
-- Excited: "With barely contained excitement, [Username] bursts forth!"
-- Question: "[Username] furrows their brow, pondering the mysteries before them."
-
-Output ONLY the narrative text, no quotes or additional formatting."""
 
 
 @dataclass
@@ -48,7 +30,7 @@ class NarrationPipeline:
 
     This is the core service that processes narration requests:
     1. Takes user input
-    2. Formats it using LLM (D&D narrator style)
+    2. Formats it using LLM (D&D narrator style) with JSON response
     3. Synthesizes speech using TTS
     4. Returns the result with audio data
     """
@@ -57,35 +39,44 @@ class NarrationPipeline:
         self,
         llm_provider: LLMProvider,
         tts_provider: TTSProvider,
-        system_prompt: str | None = None,
+        custom_prompt: str = "",
     ) -> None:
         """Initialize the pipeline.
 
         Args:
-            llm_provider: LLM provider for text formatting
-            tts_provider: TTS provider for audio synthesis
-            system_prompt: Custom narrator prompt (optional)
+            llm_provider: LLM provider for text formatting.
+            tts_provider: TTS provider for audio synthesis.
+            custom_prompt: User's custom narrator behavior prompt.
         """
         self._llm = llm_provider
         self._tts = tts_provider
-        self._system_prompt = system_prompt or DEFAULT_NARRATOR_PROMPT
+        self._custom_prompt = custom_prompt
 
     async def process(
         self,
         request: NarrationRequest,
-        target_lang: LanguageCode = LanguageCode.EN,
         *,
+        narrator_lang: LanguageCode = LanguageCode.EN,
+        subtitle_lang: LanguageCode = LanguageCode.EN,
+        auto_translate: bool = False,
         bypass_llm: bool = False,
+        voice_id: str | None = None,
     ) -> tuple[NarrationResult, PipelineMetrics]:
         """Process a narration request through the pipeline.
 
         Args:
-            request: The narration request to process
-            target_lang: Target language for TTS
-            bypass_llm: If True, skip LLM formatting and use raw message
+            request: The narration request to process.
+            narrator_lang: Language for TTS output (voice_text).
+            subtitle_lang: Language for subtitles (subtitle_text).
+            auto_translate: Enable translation between languages.
+            bypass_llm: If True, skip LLM formatting and use raw message.
+            voice_id: Explicit TTS voice ID (overrides language-based selection).
 
         Returns:
-            Tuple of (NarrationResult, PipelineMetrics)
+            Tuple of (NarrationResult, PipelineMetrics).
+
+        Raises:
+            LLMResponseParseError: If LLM returns invalid JSON.
         """
         request_id = str(uuid.uuid4())
         start_time = time.monotonic()
@@ -96,53 +87,75 @@ class NarrationPipeline:
             user=request.user,
             message_length=len(request.message),
             style=request.style,
+            narrator_lang=narrator_lang.value,
+            subtitle_lang=subtitle_lang.value,
+            auto_translate=auto_translate,
             bypass_llm=bypass_llm,
         )
 
         # Step 1: LLM formatting (or bypass)
         if bypass_llm:
-            # Skip LLM, use raw message directly
-            formatted_text = request.message
+            # Skip LLM, use raw message for both voice and subtitle
+            voice_text = request.message
+            subtitle_text = request.message
             llm_latency_ms = 0
             logger.debug(
                 "pipeline_llm_bypassed",
                 request_id=request_id,
-                text_length=len(formatted_text),
+                text_length=len(voice_text),
             )
         else:
+            # Build complete system prompt with language and style instructions
+            system_prompt = build_system_prompt(
+                narrator_lang=narrator_lang,
+                subtitle_lang=subtitle_lang,
+                auto_translate=auto_translate,
+                custom_prompt=self._custom_prompt,
+                style=request.style,
+            )
+
             logger.debug(
                 "pipeline_llm_start",
                 request_id=request_id,
                 llm_provider=self._llm.name,
             )
             llm_start = time.monotonic()
+            # This may raise LLMResponseParseError - fail fast!
             llm_response = await self._llm.generate(
                 user=request.user,
                 message=request.message,
-                system_prompt=self._system_prompt,
+                system_prompt=system_prompt,
                 style=request.style,
             )
             llm_latency_ms = int((time.monotonic() - llm_start) * 1000)
 
-            formatted_text = llm_response.text
+            voice_text = llm_response.voice_text
+            subtitle_text = llm_response.subtitle_text
 
             logger.debug(
                 "pipeline_llm_complete",
                 request_id=request_id,
-                formatted_length=len(formatted_text),
+                voice_text_length=len(voice_text),
+                subtitle_text_length=len(subtitle_text),
                 latency_ms=llm_latency_ms,
             )
 
-        # Step 2: TTS synthesis
+        # Step 2: TTS synthesis using voice_text
         logger.debug(
             "pipeline_tts_start",
             request_id=request_id,
             tts_provider=self._tts.name,
-            text_length=len(formatted_text),
-            target_lang=target_lang.value,
+            text_length=len(voice_text),
+            narrator_lang=narrator_lang.value,
+            voice_id=voice_id,
         )
         tts_start = time.monotonic()
-        audio_data = await self._tts.synthesize(formatted_text, language=target_lang)
+        # voice_id takes precedence over language-based selection
+        audio_data = await self._tts.synthesize(
+            voice_text,
+            voice_id=voice_id,
+            language=narrator_lang,
+        )
         tts_latency_ms = int((time.monotonic() - tts_start) * 1000)
 
         logger.debug(
@@ -167,27 +180,21 @@ class NarrationPipeline:
             duration_ms=duration_ms,
         )
 
-        # For Phase 1, translation is not implemented
-        # In Phase 2+, we'll add translation step here
-        was_translated = False
-        text_translated = formatted_text
-
         result = NarrationResult(
             id=request_id,
             user=request.user,
-            text_original=formatted_text,
-            text_translated=text_translated,
-            target_lang=target_lang,
+            voice_text=voice_text,
+            subtitle_text=subtitle_text,
+            target_lang=narrator_lang,
             audio_data=audio_data,
             duration_ms=duration_ms,
-            was_translated=was_translated,
         )
 
         metrics = PipelineMetrics(
             llm_latency_ms=llm_latency_ms,
             tts_latency_ms=tts_latency_ms,
             total_latency_ms=total_latency_ms,
-            text_length=len(formatted_text),
+            text_length=len(voice_text),
             audio_size_bytes=len(audio_data),
         )
 

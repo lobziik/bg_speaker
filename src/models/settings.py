@@ -3,7 +3,7 @@
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 
 from src.core.types import StrictModel
 from src.models.narration import LanguageCode, NarratorStyle
@@ -14,32 +14,54 @@ class ProviderType(StrEnum):
 
     LLM = "llm"
     TTS = "tts"
-    TRANSLATE = "translate"
 
 
 # === Global Settings ===
 
 
 class LanguageSettings(StrictModel):
-    """Language configuration for narrator."""
+    """Language configuration for narrator.
 
-    source_lang: LanguageCode = LanguageCode.RU  # Chat message language
-    narrator_lang: LanguageCode = LanguageCode.EN  # TTS output language
-    subtitle_lang: LanguageCode = LanguageCode.RU  # Overlay subtitle language
-    auto_translate: bool = True  # Enable translation
+    Attributes:
+        narrator_lang: Language for TTS voice output.
+        subtitle_lang: Language for overlay subtitles.
+    """
 
-    @property
-    def needs_translation(self) -> bool:
-        """Check if translation is needed based on settings."""
-        return self.auto_translate and self.source_lang != self.narrator_lang
+    narrator_lang: LanguageCode = LanguageCode.EN
+    subtitle_lang: LanguageCode = LanguageCode.RU
+
+    @field_validator("narrator_lang", "subtitle_lang", mode="before")
+    @classmethod
+    def convert_string_to_language_code(cls, value: str | LanguageCode) -> LanguageCode:
+        """Convert string to LanguageCode enum for JSON deserialization."""
+        if isinstance(value, str):
+            return LanguageCode(value)
+        return value
 
 
 class NarratorSettings(StrictModel):
-    """Narrator behavior settings."""
+    """Narrator behavior settings.
+
+    Attributes:
+        default_style: Default narration style when not specified.
+        system_prompt: Custom prompt to add narrator personality/behavior.
+        bypass_llm: If True, skip LLM formatting and use raw message.
+        auto_translate: When True and languages differ, LLM produces
+            voice_text in narrator_lang and subtitle_text in subtitle_lang.
+    """
 
     default_style: NarratorStyle = NarratorStyle.DEFAULT
     system_prompt: str = Field(default="")
-    bypass_llm: bool = False  # Skip LLM, read message as-is
+    bypass_llm: bool = False
+    auto_translate: bool = True
+
+    @field_validator("default_style", mode="before")
+    @classmethod
+    def convert_string_to_narrator_style(cls, value: str | NarratorStyle) -> NarratorStyle:
+        """Convert string to NarratorStyle enum for JSON deserialization."""
+        if isinstance(value, str):
+            return NarratorStyle(value)
+        return value
 
 
 class QueueSettings(StrictModel):
@@ -95,6 +117,18 @@ class TTSVoiceSettings(StrictModel):
         default_factory=dict,
         description="Custom voice ID per language (overrides defaults)",
     )
+
+    @field_validator("voice_overrides", mode="before")
+    @classmethod
+    def convert_string_keys_to_enum(
+        cls, value: dict[str | LanguageCode, str]
+    ) -> dict[LanguageCode, str]:
+        """Convert string keys to LanguageCode enum for JSON deserialization."""
+        if not isinstance(value, dict):
+            return value  # ty: ignore[invalid-return-type]
+        return {
+            LanguageCode(k) if isinstance(k, str) else k: v for k, v in value.items()
+        }
 
 
 class AppSettings(StrictModel):

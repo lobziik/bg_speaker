@@ -94,22 +94,15 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # Initialize pipeline and worker if LLM key is available
     if state.env.groq_api_key:
-        from src.models.settings import TTSVoiceSettings
         from src.providers.llm.groq import GroqLLMProvider
         from src.providers.tts.piper import PiperTTSProvider
         from src.services.pipeline import NarrationPipeline
         from src.services.worker import QueueWorker
 
-        # Load TTS voice settings for per-language voice overrides
-        tts_voice_settings = await settings_repo.get(
-            "tts_voice", TTSVoiceSettings, TTSVoiceSettings()
-        )
-        voice_overrides = (
-            tts_voice_settings.voice_overrides if tts_voice_settings else {}
-        )
-
+        # Note: TTS voice overrides are loaded per-request in the worker
+        # to ensure settings changes take effect immediately
         llm_provider = GroqLLMProvider(api_key=state.env.groq_api_key)
-        tts_provider = PiperTTSProvider(voice_overrides=voice_overrides)
+        tts_provider = PiperTTSProvider()
 
         state.pipeline = NarrationPipeline(
             llm_provider=llm_provider,
@@ -162,7 +155,7 @@ def create_app() -> FastAPI:
     )
 
     # Access logging middleware (GET at DEBUG, others at INFO)
-    app.add_middleware(AccessLogMiddleware)
+    app.add_middleware(AccessLogMiddleware)  # ty: ignore[invalid-argument-type]
 
     # Mount static files
     if STATIC_PATH.exists():

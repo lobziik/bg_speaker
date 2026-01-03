@@ -16,8 +16,9 @@ def mock_llm_provider() -> MagicMock:
     provider.name = "mock_llm"
     provider.generate = AsyncMock(
         return_value=LLMResponse(
-            text="The adventurer speaks with great enthusiasm!",
-            raw_response='{"mock": true}',
+            voice_text="The adventurer speaks with great enthusiasm!",
+            subtitle_text="The adventurer speaks with great enthusiasm!",
+            raw_response='{"voice_text": "...", "subtitle_text": "..."}',
         )
     )
     provider.health_check = AsyncMock(return_value=True)
@@ -82,12 +83,14 @@ class TestNarrationPipeline:
         # Verify TTS was called with LLM output and language
         mock_tts_provider.synthesize.assert_called_once_with(
             "The adventurer speaks with great enthusiasm!",
+            voice_id=None,
             language=LanguageCode.EN,
         )
 
         # Verify result
         assert result.user == "TestUser"
-        assert result.text_original == "The adventurer speaks with great enthusiasm!"
+        assert result.voice_text == "The adventurer speaks with great enthusiasm!"
+        assert result.subtitle_text == "The adventurer speaks with great enthusiasm!"
         assert isinstance(result.audio_data, bytes)
         assert result.duration_ms > 0
 
@@ -117,19 +120,19 @@ class TestNarrationPipeline:
         assert call_args.kwargs["style"] == "whisper"
 
     @pytest.mark.asyncio
-    async def test_process_with_target_language(
+    async def test_process_with_narrator_language(
         self,
         pipeline: NarrationPipeline,
     ) -> None:
-        """Test pipeline processing with target language."""
+        """Test pipeline processing with narrator language."""
         request = NarrationRequest(
             user="TestUser",
             message="Hello!",
         )
 
-        result, _ = await pipeline.process(request, target_lang=LanguageCode.DE)
+        result, _ = await pipeline.process(request, narrator_lang=LanguageCode.RU)
 
-        assert result.target_lang == LanguageCode.DE
+        assert result.target_lang == LanguageCode.RU
 
     @pytest.mark.asyncio
     async def test_process_generates_unique_id(
@@ -190,18 +193,18 @@ class TestNarrationPipeline:
         assert health["pipeline"] is False
 
     @pytest.mark.asyncio
-    async def test_custom_system_prompt(
+    async def test_custom_prompt(
         self,
         mock_llm_provider: MagicMock,
         mock_tts_provider: MagicMock,
     ) -> None:
-        """Test pipeline with custom system prompt."""
+        """Test pipeline with custom narrator prompt."""
         custom_prompt = "You are a pirate narrator. Arrr!"
 
         pipeline = NarrationPipeline(
             llm_provider=mock_llm_provider,
             tts_provider=mock_tts_provider,
-            system_prompt=custom_prompt,
+            custom_prompt=custom_prompt,
         )
 
         request = NarrationRequest(
@@ -211,8 +214,10 @@ class TestNarrationPipeline:
 
         await pipeline.process(request)
 
+        # Verify custom prompt was included in the system prompt
         call_args = mock_llm_provider.generate.call_args
-        assert call_args.kwargs["system_prompt"] == custom_prompt
+        system_prompt = call_args.kwargs["system_prompt"]
+        assert custom_prompt in system_prompt
 
     def test_estimate_audio_duration_wav(
         self,

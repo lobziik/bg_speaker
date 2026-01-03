@@ -36,6 +36,10 @@ class SettingsRepository:
     ) -> T | None:
         """Get typed setting by key.
 
+        Handles backward compatibility by filtering out fields that no longer
+        exist in the model schema. This allows schema evolution without
+        requiring data migrations for removed fields.
+
         Args:
             key: Setting key.
             model: Pydantic model class to deserialize to.
@@ -51,7 +55,14 @@ class SettingsRepository:
             row = await cursor.fetchone()
             if row is None:
                 return default
-            return model.model_validate_json(row[0])
+
+            # Parse JSON and filter to only known fields for backward compatibility.
+            # This handles cases where fields were removed from the model.
+            data = json.loads(row[0])
+            known_fields = set(model.model_fields.keys())
+            filtered_data = {k: v for k, v in data.items() if k in known_fields}
+
+            return model.model_validate(filtered_data)
 
     async def set(self, key: str, value: T) -> None:
         """Save typed setting.
