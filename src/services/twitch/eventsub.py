@@ -203,10 +203,17 @@ class TwitchEventSubService:
             )
 
             # Add the user token to twitchio's HTTP manager for API calls
-            await self._client.add_token(self._access_token, self._refresh_token)
+            # TwitchIO stores tokens keyed by user_id from its validation response
+            token_payload = await self._client.add_token(
+                self._access_token, self._refresh_token
+            )
             logger.info(
                 "eventsub_token_added",
                 broadcaster_id=self._broadcaster_id,
+                token_user_id=token_payload.user_id,
+                token_login=token_payload.login,
+                user_id_matches_broadcaster=token_payload.user_id
+                == self._broadcaster_id,
             )
 
             # Create subscription payload
@@ -215,9 +222,17 @@ class TwitchEventSubService:
             )
 
             # Subscribe to channel point redemptions via WebSocket
+            # CRITICAL: Use token_payload.user_id (not broadcaster_id) because
+            # TwitchIO stores and looks up tokens by the user_id from add_token()
+            logger.debug(
+                "eventsub_subscribing",
+                token_for=token_payload.user_id,
+                broadcaster_id=self._broadcaster_id,
+                subscription_type="channel.channel_points_custom_reward_redemption.add",
+            )
             await self._client.subscribe_websocket(
                 subscription,
-                token_for=self._broadcaster_id,
+                token_for=token_payload.user_id,
             )
             logger.info(
                 "eventsub_subscription_created",

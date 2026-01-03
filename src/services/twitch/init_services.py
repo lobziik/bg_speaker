@@ -102,6 +102,12 @@ async def initialize_twitch_services(
         await twitch_repo.save_reward_id(reward_id)
 
         # Step 2: Create EventSub service with tokens
+        logger.debug(
+            "eventsub_creating_with_tokens",
+            broadcaster_id=broadcaster_id,
+            access_token_prefix=access_token[:10] + "...",
+            reward_id=reward_id,
+        )
         eventsub = TwitchEventSubService(
             client_id=state.env.twitch_client_id,
             client_secret=state.env.twitch_client_secret,
