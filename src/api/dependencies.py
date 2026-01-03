@@ -17,8 +17,10 @@ from src.services.rate_limiter import RateLimiter
 from src.services.twitch.auth import TwitchAuthService
 
 if TYPE_CHECKING:
+    from src.services.pipeline import NarrationPipeline
     from src.services.twitch.eventsub import TwitchEventSubService
     from src.services.twitch.rewards import TwitchRewardController
+    from src.services.worker import QueueWorker
 
 
 @dataclass
@@ -34,6 +36,8 @@ class AppState:
     rate_limiter: RateLimiter
     queue: NarrationQueue
     twitch_auth: TwitchAuthService
+    pipeline: NarrationPipeline | None = None
+    worker: QueueWorker | None = None
     twitch_eventsub: TwitchEventSubService | None = None
     twitch_rewards: TwitchRewardController | None = None
     _initialized: bool = field(default=False, repr=False)
@@ -47,6 +51,8 @@ class AppState:
 
     async def shutdown(self) -> None:
         """Shutdown all services."""
+        if self.worker:
+            await self.worker.stop()
         if self.twitch_eventsub:
             await self.twitch_eventsub.stop()
         if self.twitch_rewards:
@@ -88,7 +94,7 @@ def get_app_state() -> AppState:
         twitch_auth = TwitchAuthService(
             client_id=env.twitch_client_id,
             client_secret=env.twitch_client_secret,
-            redirect_uri="http://localhost:8000/auth/callback",
+            redirect_uri=env.twitch_redirect_uri,
         )
 
         _app_state = AppState(

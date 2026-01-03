@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from src.services.rate_limiter import RateLimiter, RateLimitResult, RejectionReason
+from src.services.rate_limiter import RateLimiter, RejectionReason
 
 
 @pytest.fixture

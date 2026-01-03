@@ -5,7 +5,6 @@ import pytest
 from src.models.settings import QueueSettings
 from src.services.queue import (
     NarrationQueue,
-    QueueAddResult,
     QueueEventType,
     QueueItem,
 )
@@ -72,9 +71,7 @@ class TestQueueAdd:
         assert result.rejection_reason == RejectionReason.MESSAGE_FILTERED
 
     @pytest.mark.asyncio
-    async def test_add_queue_full(
-        self, queue_settings: QueueSettings, rate_limiter: RateLimiter
-    ) -> None:
+    async def test_add_queue_full(self, rate_limiter: RateLimiter) -> None:
         """Should reject when queue is full."""
         # Create queue with max_size of 2
         small_settings = QueueSettings(max_size=2)
@@ -168,9 +165,7 @@ class TestQueueEvents:
         assert events[0][1].user == "user1"
 
     @pytest.mark.asyncio
-    async def test_queue_full_event(
-        self, queue_settings: QueueSettings, rate_limiter: RateLimiter
-    ) -> None:
+    async def test_queue_full_event(self, rate_limiter: RateLimiter) -> None:
         """Should emit QUEUE_FULL event when queue is full."""
         small_settings = QueueSettings(max_size=1)
         small_queue = NarrationQueue(settings=small_settings, rate_limiter=rate_limiter)

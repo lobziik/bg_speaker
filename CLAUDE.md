@@ -64,6 +64,7 @@ Providers implement `get_settings_schema()` returning JSON Schema for dynamic We
 - `pipeline.py`: Orchestrates LLM → TTS flow
 - `queue.py`: Message queue with priority and rate limiting
 - `rate_limiter.py`: Global TTS rate limit + per-user cooldowns
+- `worker.py`: Background queue processor that runs pipeline and broadcasts via WebSocket
 
 ### Data Layer
 - SQLite database at `data/narrator.db`
@@ -72,6 +73,9 @@ Providers implement `get_settings_schema()` returning JSON Schema for dynamic We
 
 ### Web Components
 - `src/api/`: FastAPI routes (JSON API + WebSocket)
+- `src/api/websocket.py`: WebSocket connection manager for overlay broadcasts
+- `src/api/ws_types.py`: TypedDict message types for WebSocket protocol
+- `src/api/routes/overlay.py`: WebSocket endpoint (`/ws/overlay`) and static file serving
 - `src/views/`: HTMX endpoints returning HTML partials
 - `src/templates/`: Jinja2 templates with HTMX
 - `overlay/`: OBS Browser Source (HTML/CSS/JS) connecting via WebSocket
@@ -87,6 +91,9 @@ Providers implement `get_settings_schema()` returning JSON Schema for dynamic We
 ## Fail fast and LOUD
 Never do `except Exception:`. Always narrow down the exception type and handle it properly.
 Better fail than swallow an error.
+
+## Queue Event Handlers
+Queue event handlers (registered via `queue.on_event()`) are called while the queue lock is held. **Never call `queue.get_items()` or other queue methods from an event handler** - this will cause a deadlock. Use `asyncio.create_task()` to defer any queue access.
 
 ## Key Design Decisions
 
@@ -107,3 +114,16 @@ Required env vars: `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_CHANNEL`,
 ## Testing
 
 Tests in `tests/` directory mirror `src/` structure. Use `pytest-asyncio` for async tests. Coverage target: 80%.
+
+## OBS Overlay
+
+The overlay is served at `/overlay` and connects via WebSocket at `/ws/overlay`.
+
+```bash
+# Test the overlay
+curl -X POST http://localhost:8000/api/test/narrate \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello!", "user": "TestUser"}'
+```
+
+Debug mode: Add `?debug=1` to show connection status and queue indicator.

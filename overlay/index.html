@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BG3 Narrator Overlay</title>
+    <link rel="stylesheet" href="/overlay/styles.css">
+    <!-- BG3-inspired fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Cinzel:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Subtitle container -->
+    <div id="subtitle-container" class="hidden">
+        <div id="subtitle-box">
+            <div id="subtitle-user"></div>
+            <div id="subtitle-text"></div>
+        </div>
+    </div>
+
+    <!-- Queue indicator (optional, for debugging) -->
+    <div id="queue-indicator" class="hidden">
+        <span id="queue-count">0</span> in queue
+    </div>
+
+    <!-- Connection status -->
+    <div id="connection-status" class="disconnected">
+        <span class="status-dot"></span>
+        <span class="status-text">Connecting...</span>
+    </div>
+
+    <!-- Audio element for playback -->
+    <audio id="audio-player" preload="auto"></audio>
+
+    <script src="/overlay/client.js"></script>
+</body>
+</html>

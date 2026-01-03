@@ -26,6 +26,7 @@ class EnvSettings(BaseSettings):
     twitch_client_id: str = ""
     twitch_client_secret: SecretStr = SecretStr("")
     twitch_channel: str = ""
+    twitch_redirect_uri: str = "http://localhost:8000/auth/callback"
 
     # LLM Providers
     groq_api_key: SecretStr | None = None
