@@ -54,12 +54,14 @@ Phase 4 adds a functional web UI for configuration and monitoring of the BG3 Nar
 - [x] `src/views/settings.py` - Settings routes:
   - `GET /settings` - Settings page with all sections
   - `POST /settings/language` - Save language settings
+  - `POST /settings/tts_voice` - Save TTS voice settings (per-language voice selection)
   - `POST /settings/narrator` - Save narrator settings
   - `POST /settings/queue` - Save queue settings
   - `POST /settings/overlay` - Save overlay settings
   - `POST /settings/reward` - Save Twitch reward settings
 - [x] `src/templates/pages/settings.html` - Settings view:
   - Language settings (source, narrator, subtitle languages)
+  - TTS Voice settings (per-language voice selection dropdowns)
   - Narrator settings (style, custom system prompt)
   - Queue settings (max size, message limits, cooldowns, priority users)
   - Overlay settings (font, colors, animation, position)
@@ -144,7 +146,27 @@ Phase 4 adds a functional web UI for configuration and monitoring of the BG3 Nar
   - `TemplatesDep` - Jinja2Templates dependency
   - `SettingsRepoDep` - Settings repository dependency
 
-### 11. WebSocket JS Integration
+### 11. Dynamic TTS Voice Selection
+
+- [x] `src/providers/tts/piper.py` - Voice selection by language:
+  - `LANGUAGE_DEFAULT_VOICES` mapping `LanguageCode` to default Piper voice
+  - `get_voice_for_language()` returns voice ID (override or default)
+  - `get_voices_for_language()` filters available voices by language
+  - Multi-voice caching in `_voices` dict (lazy-loaded per voice ID)
+  - `synthesize()` accepts `language` parameter for automatic voice selection
+- [x] `src/providers/tts/base.py` - Protocol updated:
+  - Added `language: LanguageCode | None` to `synthesize()` signature
+- [x] `src/models/settings.py` - Voice settings model:
+  - `TTSVoiceSettings` with `voice_overrides: dict[LanguageCode, str]`
+- [x] `src/services/worker.py` - Language flow:
+  - Loads `LanguageSettings` from database
+  - Passes `narrator_lang` to pipeline as `target_lang`
+- [x] `src/services/pipeline.py` - TTS integration:
+  - Passes `language=target_lang` to TTS `synthesize()` call
+- [x] `src/api/app.py` - Startup:
+  - Loads `TTSVoiceSettings` and passes `voice_overrides` to `PiperTTSProvider`
+
+### 12. WebSocket JS Integration
 
 - [x] `src/static/js/app.js` - NarratorUI class:
   - WebSocket connection with auto-reconnect
@@ -204,6 +226,7 @@ migrations/
 | `/partials/rate-limit-status` | GET | Rate limit countdown |
 | `/settings` | GET | Settings page |
 | `/settings/language` | POST | Save language settings |
+| `/settings/tts_voice` | POST | Save TTS voice settings (per-language) |
 | `/settings/narrator` | POST | Save narrator settings |
 | `/settings/queue` | POST | Save queue settings |
 | `/settings/overlay` | POST | Save overlay settings |
@@ -220,17 +243,18 @@ migrations/
 ## Test Results
 
 ```
-85 tests passed in 1.80s
+96 tests passed in 1.95s
 
 All existing tests continue to pass.
 Phase 4 UI routes tested manually.
+New voice selection tests added (10 tests in TestPiperLanguageVoiceSelection).
 ```
 
 ## Type Checking
 
 ```
-mypy: Success (48 source files)
-ty: All checks passed
+mypy: Success (50 source files)
+ruff: All checks passed
 ```
 
 ## Usage
@@ -296,14 +320,14 @@ def _toast_response(message: str, success: bool = True) -> dict[str, Any]:
 ## Known Limitations
 
 - Provider settings dynamic forms not yet implemented (placeholder in settings)
-- No voice preview in settings
+- No voice preview audio in settings (selection works, but no preview playback)
 - No real-time log streaming (manual refresh required)
 - No authentication on web UI (local access assumed)
 
 ## Next Steps (Phase 5)
 
 1. Dynamic provider settings forms (JSON Schema → form)
-2. Voice preview/selection
+2. Voice preview audio playback
 3. Real-time log streaming
 4. Basic authentication for web UI
 5. Mobile-responsive improvements

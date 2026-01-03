@@ -48,6 +48,10 @@ GROQ_API_KEY=your_groq_key
 # App
 SECRET_KEY=your_secret_key
 DATABASE_URL=sqlite:///data/narrator.db
+
+# Logging (optional)
+LOG_LEVEL=info          # debug, info, warning, error
+LOG_FORMAT=console      # console (human-readable) or json (for Railway/production)
 ```
 
 ## Twitch OAuth Setup

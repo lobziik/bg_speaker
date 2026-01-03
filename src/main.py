@@ -22,15 +22,20 @@ from src.providers.tts.piper import PiperSettings, PiperTTSProvider
 from src.services.pipeline import NarrationPipeline
 
 LogLevel = Literal["debug", "info", "warning", "error"]
+LogFormat = Literal["console", "json"]
 
 
-def configure_logging(level: LogLevel = "info") -> None:
+def configure_logging(
+    level: LogLevel = "info",
+    log_format: LogFormat = "console",
+) -> None:
     """Configure structlog and stdlib logging.
 
     Routes all stdlib logging through structlog processors for consistent output.
 
     Args:
         level: Log level (debug, info, warning, error).
+        log_format: Output format ("console" for human-readable, "json" for structured).
     """
     # Map string level to logging constants
     level_map = {
@@ -65,12 +70,18 @@ def configure_logging(level: LogLevel = "info") -> None:
         cache_logger_on_first_use=False,  # Allow reconfiguration
     )
 
+    # Choose renderer based on format
+    if log_format == "json":
+        renderer: structlog.types.Processor = structlog.processors.JSONRenderer()
+    else:
+        renderer = structlog.dev.ConsoleRenderer()
+
     # Create formatter that renders structlog output
     formatter = structlog.stdlib.ProcessorFormatter(
         foreign_pre_chain=shared_processors,
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-            structlog.dev.ConsoleRenderer(),
+            renderer,
         ],
     )
 
@@ -103,8 +114,9 @@ def configure_logging(level: LogLevel = "info") -> None:
         lib_logger.propagate = False  # Don't double-log
 
 
-# Initialize with default level (can be reconfigured via CLI)
-configure_logging("info")
+# Initialize with env settings (can be reconfigured via CLI)
+_init_env = get_env_settings()
+configure_logging(level=_init_env.log_level, log_format=_init_env.log_format)
 
 logger = structlog.get_logger()
 
@@ -198,6 +210,7 @@ def run_server(
     port: int = 8000,
     reload: bool = False,
     log_level: LogLevel = "info",
+    log_format: LogFormat = "console",
 ) -> None:
     """Run the FastAPI server.
 
@@ -206,13 +219,14 @@ def run_server(
         port: Port to bind to.
         reload: Enable auto-reload for development.
         log_level: Log level for the application.
+        log_format: Output format ("console" or "json").
     """
     from src.api.app import create_app
 
-    # Reconfigure logging with the specified level
-    configure_logging(log_level)
+    # Reconfigure logging with the specified level and format
+    configure_logging(log_level, log_format)
 
-    logger.info("server_starting", host=host, port=port, log_level=log_level)
+    logger.info("server_starting", host=host, port=port, log_level=log_level, log_format=log_format)
 
     # Create the app
     app = create_app()
@@ -306,14 +320,17 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "serve":
+        env = get_env_settings()
         run_server(
             host=args.host,
             port=args.port,
             reload=args.reload,
             log_level=args.log_level,
+            log_format=env.log_format,
         )
     elif args.command == "test":
-        configure_logging(args.log_level)
+        env = get_env_settings()
+        configure_logging(args.log_level, env.log_format)
         print("BG3 Narrator Bot - Testing pipeline...")
         asyncio.run(
             run_pipeline(

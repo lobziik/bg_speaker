@@ -58,6 +58,14 @@ All external services (LLM, TTS, Translation) use Protocol-based abstraction in 
 
 Providers implement `get_settings_schema()` returning JSON Schema for dynamic Web UI form generation.
 
+### Piper TTS Voice Selection
+Piper automatically selects the appropriate voice based on the configured `narrator_lang`:
+- `LANGUAGE_DEFAULT_VOICES` in `src/providers/tts/piper.py` maps each `LanguageCode` to a default voice
+- Users can override default voices per language via Settings → TTS Voice tab
+- Voice overrides stored in `TTSVoiceSettings.voice_overrides` (SQLite, key: `tts_voice`)
+- Voice models are lazy-loaded and cached per voice ID in `PiperTTSProvider._voices`
+- The `language` parameter flows: Worker → Pipeline → TTS `synthesize()`
+
 ### Service Layer (`src/services/`)
 - `twitch/eventsub.py`: TwitchIO 3.x EventSub WebSocket for Channel Points redemptions
 - `twitch/rewards.py`: Manages Channel Points reward lifecycle (create/pause/fulfill/cancel)
@@ -82,7 +90,7 @@ Providers implement `get_settings_schema()` returning JSON Schema for dynamic We
 ### Web UI (Phase 4)
 - `src/views/`: HTMX view routes returning HTML pages/partials
   - `dashboard.py`: Main dashboard with queue status, worker control
-  - `settings.py`: Settings forms (language, narrator, queue, overlay, reward)
+  - `settings.py`: Settings forms (language, TTS voice, narrator, queue, overlay, reward)
   - `queue.py`: Queue management (view, skip, clear)
   - `test.py`: Manual narration testing
   - `logs.py`: Narration history with filtering/pagination
@@ -118,6 +126,7 @@ Queue event handlers (registered via `queue.on_event()`) are called while the qu
 ## Key Design Decisions
 
 - **Piper TTS for MVP**: CPU-friendly (3-11x realtime), MIT licensed, no GPU required. ElevenLabs optional for premium voices.
+- **Dynamic Voice Selection**: Piper voice automatically selected based on `narrator_lang` setting. Each language has a default voice (e.g., `ru_RU-ruslan-medium` for Russian), with per-language overrides configurable via UI.
 - **Single OBS Source**: Audio + subtitles delivered via one WebSocket connection
 - **Language Independence**: `source_lang`, `narrator_lang`, `subtitle_lang` are separately configurable
 - **Translation Skip**: When `source_lang == narrator_lang`, translation step is bypassed
@@ -143,7 +152,7 @@ The web dashboard is served at `http://localhost:8000` with the following pages:
 | Route | Description |
 |-------|-------------|
 | `/` | Dashboard with queue status, worker control |
-| `/settings` | Configuration for language, narrator, queue, overlay, rewards |
+| `/settings` | Configuration for language, TTS voice, narrator, queue, overlay, rewards |
 | `/queue` | Queue management (view, skip, clear items) |
 | `/test` | Manual narration testing |
 | `/logs` | Narration history with filtering |

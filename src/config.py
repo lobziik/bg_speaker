@@ -1,6 +1,7 @@
 """Configuration loading and management."""
 
 from pathlib import Path
+from typing import Literal
 
 import structlog
 from pydantic import SecretStr
@@ -47,6 +48,10 @@ class EnvSettings(BaseSettings):
     # Paths
     prompts_path: Path = Path("config/prompts")
     models_path: Path = Path("models")
+
+    # Logging
+    log_format: Literal["console", "json"] = "console"
+    log_level: Literal["debug", "info", "warning", "error"] = "info"
 
     def get_available_llm_providers(self) -> list[str]:
         """Return list of configured LLM providers."""
