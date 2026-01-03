@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from src.api.dependencies import AppStateDep, TemplatesDep
+# TC001 ignored: FastAPI Depends() requires these at runtime for dependency injection
+from src.api.dependencies import AppStateDep, TemplatesDep  # noqa: TC001
 
 router = APIRouter()
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends
 from fastapi.templating import Jinja2Templates
 
 from src.config import EnvSettings, get_env_settings
@@ -22,6 +22,7 @@ from src.services.twitch.auth import TwitchAuthService
 TEMPLATES_PATH = Path(__file__).parent.parent / "templates"
 
 if TYPE_CHECKING:
+    from src.services.global_cooldown import GlobalCooldownManager
     from src.services.pipeline import NarrationPipeline
     from src.services.twitch.eventsub import TwitchEventSubService
     from src.services.twitch.rewards import TwitchRewardController
@@ -45,6 +46,7 @@ class AppState:
     worker: QueueWorker | None = None
     twitch_eventsub: TwitchEventSubService | None = None
     twitch_rewards: TwitchRewardController | None = None
+    global_cooldown: GlobalCooldownManager | None = None
     _initialized: bool = field(default=False, repr=False)
 
     async def initialize(self) -> None:
@@ -58,6 +60,8 @@ class AppState:
         """Shutdown all services."""
         if self.worker:
             await self.worker.stop()
+        if self.global_cooldown:
+            await self.global_cooldown.shutdown()
         if self.twitch_eventsub:
             await self.twitch_eventsub.stop()
         if self.twitch_rewards:

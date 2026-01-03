@@ -6,10 +6,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-import aiosqlite
-
 if TYPE_CHECKING:
-    pass
+    import aiosqlite
 
 
 @dataclass

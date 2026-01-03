@@ -8,7 +8,8 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 
-from src.api.dependencies import AppStateDep, SettingsRepoDep, TemplatesDep
+# TC001 ignored: FastAPI Depends() requires these at runtime for dependency injection
+from src.api.dependencies import AppStateDep, SettingsRepoDep, TemplatesDep  # noqa: TC001
 from src.models.narration import LanguageCode, NarratorStyle
 from src.models.settings import (
     LanguageSettings,
@@ -183,6 +184,7 @@ async def save_overlay_settings(
 @router.post("/settings/reward", response_class=HTMLResponse)
 async def save_reward_settings(
     request: Request,
+    state: AppStateDep,
     settings_repo: SettingsRepoDep,
 ) -> Response:
     """Save Twitch reward settings."""
@@ -197,9 +199,16 @@ async def save_reward_settings(
         refund_on_queue_full=form_data.get("refund_on_queue_full") == "on",
         refund_on_filtered=form_data.get("refund_on_filtered") == "on",
         refund_on_banned_user=form_data.get("refund_on_banned_user") == "on",
+        global_cooldown_seconds=int(str(form_data.get("global_cooldown_seconds", 300))),
     )
 
     await settings_repo.set("reward", settings)
+
+    # Update global cooldown manager with new duration
+    if state.global_cooldown:
+        await state.global_cooldown.update_cooldown_duration(
+            settings.global_cooldown_seconds
+        )
 
     return Response(
         content="<div class='toast success'>Reward settings saved</div>",

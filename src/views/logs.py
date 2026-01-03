@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from src.api.dependencies import AppStateDep, TemplatesDep
+# TC001 ignored: FastAPI Depends() requires these at runtime for dependency injection
+from src.api.dependencies import AppStateDep, TemplatesDep  # noqa: TC001
 from src.db.repositories.narration_log import LogFilter, NarrationLogRepository
 
 router = APIRouter()
@@ -32,16 +34,12 @@ async def logs_page(
     date_to_dt = None
 
     if date_from:
-        try:
+        with contextlib.suppress(ValueError):
             date_from_dt = datetime.fromisoformat(date_from)
-        except ValueError:
-            pass
 
     if date_to:
-        try:
+        with contextlib.suppress(ValueError):
             date_to_dt = datetime.fromisoformat(date_to)
-        except ValueError:
-            pass
 
     filters = LogFilter(
         user=user,
@@ -92,16 +90,12 @@ async def logs_table_partial(
     date_to_dt = None
 
     if date_from:
-        try:
+        with contextlib.suppress(ValueError):
             date_from_dt = datetime.fromisoformat(date_from)
-        except ValueError:
-            pass
 
     if date_to:
-        try:
+        with contextlib.suppress(ValueError):
             date_to_dt = datetime.fromisoformat(date_to)
-        except ValueError:
-            pass
 
     filters = LogFilter(
         user=user,

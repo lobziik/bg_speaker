@@ -74,6 +74,12 @@ class TwitchRewardSettings(StrictModel):
     refund_on_queue_full: bool = True
     refund_on_filtered: bool = True
     refund_on_banned_user: bool = False
+    global_cooldown_seconds: int = Field(
+        default=300,
+        ge=0,
+        le=3600,
+        description="Global cooldown after each narration (pauses Twitch reward for all users)",
+    )
 
 
 class AppSettings(StrictModel):

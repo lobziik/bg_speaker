@@ -64,6 +64,7 @@ Providers implement `get_settings_schema()` returning JSON Schema for dynamic We
 - `pipeline.py`: Orchestrates LLM → TTS flow
 - `queue.py`: Message queue with priority and rate limiting
 - `rate_limiter.py`: Global TTS rate limit + per-user cooldowns
+- `global_cooldown.py`: Global Twitch reward cooldown (pauses reward after each narration)
 - `worker.py`: Background queue processor that runs pipeline and broadcasts via WebSocket
 
 ### Data Layer
@@ -121,6 +122,7 @@ Queue event handlers (registered via `queue.on_event()`) are called while the qu
 - **Language Independence**: `source_lang`, `narrator_lang`, `subtitle_lang` are separately configurable
 - **Translation Skip**: When `source_lang == narrator_lang`, translation step is bypassed
 - **SecretStr**: All API keys use Pydantic SecretStr (env vars only, never in DB)
+- **Global Cooldown**: After each narration (success or failure), the Twitch reward is paused for a configurable duration (default 5 minutes) to prevent rapid redemptions. State persists across restarts.
 
 ## Configuration
 

@@ -11,7 +11,6 @@ import asyncio
 import contextlib
 from typing import TYPE_CHECKING
 
-import aiosqlite
 import structlog
 
 from src.api.websocket import WebSocketManager
@@ -21,6 +20,9 @@ from src.services.pipeline import NarrationPipeline
 from src.services.queue import NarrationQueue, QueueItem
 
 if TYPE_CHECKING:
+    import aiosqlite
+
+    from src.services.global_cooldown import GlobalCooldownManager
     from src.services.twitch.rewards import TwitchRewardController
 
 logger = structlog.get_logger()
@@ -43,6 +45,7 @@ class QueueWorker:
         ws_manager: WebSocketManager,
         rewards_controller: TwitchRewardController | None = None,
         db_connection: aiosqlite.Connection | None = None,
+        global_cooldown: GlobalCooldownManager | None = None,
     ) -> None:
         """Initialize the queue worker.
 
@@ -52,12 +55,14 @@ class QueueWorker:
             ws_manager: WebSocket manager for broadcasting.
             rewards_controller: Optional Twitch rewards for fulfill/cancel.
             db_connection: Optional database connection for logging.
+            global_cooldown: Optional global cooldown manager for Twitch reward.
         """
         self._queue = queue
         self._pipeline = pipeline
         self._ws_manager = ws_manager
         self._rewards = rewards_controller
         self._db_connection = db_connection
+        self._global_cooldown = global_cooldown
         self._task: asyncio.Task[None] | None = None
         self._running = False
 
@@ -199,6 +204,17 @@ class QueueWorker:
                         "redemption_cancel_failed",
                         redemption_id=item.redemption_id,
                         error=str(cancel_error),
+                    )
+
+        finally:
+            # Trigger global cooldown regardless of success/failure
+            if self._global_cooldown:
+                try:
+                    await self._global_cooldown.on_narration_complete()
+                except Exception as cooldown_error:
+                    logger.error(
+                        "global_cooldown_trigger_failed",
+                        error=str(cooldown_error),
                     )
 
     async def _log_narration(

@@ -34,6 +34,34 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     ws_manager = get_websocket_manager()
     ws_manager.set_services(state.queue, state.rate_limiter)
 
+    # Initialize global cooldown manager
+    from src.db.repositories.settings import SettingsRepository
+    from src.models.settings import TwitchRewardSettings
+    from src.services.global_cooldown import CooldownStatus, GlobalCooldownManager
+
+    settings_repo = SettingsRepository(state.db.connection)
+    reward_settings = await settings_repo.get(
+        "reward", TwitchRewardSettings, TwitchRewardSettings()
+    )
+    cooldown_seconds = reward_settings.global_cooldown_seconds if reward_settings else 300
+
+    async def on_cooldown_status_change(status: CooldownStatus) -> None:
+        """Broadcast cooldown status changes to WebSocket clients."""
+        await ws_manager.broadcast_global_cooldown_status(
+            is_active=status.is_active,
+            remaining_seconds=status.remaining_seconds,
+            total_seconds=status.total_seconds,
+        )
+
+    state.global_cooldown = GlobalCooldownManager(
+        rewards_controller=state.twitch_rewards,
+        db_connection=state.db.connection,
+        cooldown_seconds=cooldown_seconds,
+        on_status_change=on_cooldown_status_change,
+    )
+    await state.global_cooldown.initialize()
+    logger.info("global_cooldown_manager_initialized", cooldown_seconds=cooldown_seconds)
+
     # Initialize pipeline and worker if LLM key is available
     if state.env.groq_api_key:
         from src.providers.llm.groq import GroqLLMProvider
@@ -55,6 +83,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             ws_manager=ws_manager,
             rewards_controller=state.twitch_rewards,
             db_connection=state.db.connection,
+            global_cooldown=state.global_cooldown,
         )
 
         await state.worker.start()
@@ -104,7 +133,8 @@ def create_app() -> FastAPI:
     app.include_router(overlay.router, tags=["Overlay"])
 
     # Include view routers (Web UI)
-    from src.views import dashboard, logs, queue, settings, test as test_view
+    from src.views import dashboard, logs, queue, settings
+    from src.views import test as test_view
 
     app.include_router(dashboard.router, tags=["Views"])
     app.include_router(settings.router, tags=["Views"])

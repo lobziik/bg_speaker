@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from src.api.dependencies import AppStateDep, TemplatesDep
+# TC001 ignored: FastAPI Depends() requires these at runtime for dependency injection
+from src.api.dependencies import AppStateDep, TemplatesDep  # noqa: TC001
 from src.models.narration import NarratorStyle
 
 router = APIRouter()
@@ -59,7 +60,8 @@ async def test_narrate(
     )
 
     if not result.success:
-        reason_msg = str(result.rejection_reason.value) if result.rejection_reason else "Unknown error"
+        reason = result.rejection_reason
+        reason_msg = str(reason.value) if reason else "Unknown error"
         return templates.TemplateResponse(
             request,
             "partials/narration_result.html",

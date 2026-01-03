@@ -11,6 +11,7 @@ A Twitch Channel Points integration that reads chat messages in the dramatic voi
 - **Configurable Languages**: Source, narrator, and subtitle languages are independent
 - **Provider Abstraction**: Swappable LLM, TTS, and Translation providers
 - **Priority Queue**: VIP users processed first, with rate limiting
+- **Global Cooldown**: Configurable pause after each narration (default 5 min) to prevent spam
 - **OBS Overlay**: WebSocket-based overlay with subtitles and audio
 - **Type Safety**: Pydantic v2 strict mode, mypy + ty, typed protocols everywhere
 
@@ -86,8 +87,8 @@ uv run ruff format .
 
 The bot includes a BG3-themed web dashboard at `http://localhost:8000`:
 
-- **Dashboard** (`/`): Queue status, rate limit countdown, worker control
-- **Settings** (`/settings`): Language, narrator, queue, overlay, and reward configuration
+- **Dashboard** (`/`): Queue status, rate limit countdown, global cooldown status, worker control
+- **Settings** (`/settings`): Language, narrator, queue, overlay, reward, and global cooldown configuration
 - **Queue** (`/queue`): View and manage pending narrations
 - **Test** (`/test`): Submit test narrations manually
 - **Logs** (`/logs`): View narration history with filtering

@@ -300,6 +300,22 @@
             </div>
         </div>
 
+        <div class="form-section">
+            <div class="form-section-title">Global Cooldown</div>
+            <div class="form-group">
+                <label for="global_cooldown_seconds">Cooldown After Narration (seconds)</label>
+                <div class="range-container">
+                    <input type="range" name="global_cooldown_seconds" id="global_cooldown_seconds"
+                           min="0" max="3600" step="30" value="{{ reward.global_cooldown_seconds }}">
+                    <span class="range-value">{{ reward.global_cooldown_seconds }}</span>
+                </div>
+                <small class="help-text">
+                    Pause Twitch reward for ALL users after each narration. Set to 0 to disable.
+                    This prevents rapid redemptions and gives viewers time to enjoy each narration.
+                </small>
+            </div>
+        </div>
+
         <div class="btn-group">
             <button type="submit" class="btn btn-primary">Save Reward Settings</button>
         </div>

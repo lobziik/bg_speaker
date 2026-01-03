@@ -16,3 +16,38 @@
         </small>
     </div>
 </div>
+
+{% if global_cooldown_status and global_cooldown_status.is_active %}
+<div class="rate-limit-status global-cooldown-status" style="margin-top: 0.75rem;">
+    <div class="indicator waiting"></div>
+    <div style="flex: 1;">
+        <div class="countdown">
+            {% if global_cooldown_status.remaining_seconds is not none %}
+                Reward paused: {{ "%.0f"|format(global_cooldown_status.remaining_seconds) }}s remaining
+            {% else %}
+                Reward paused
+            {% endif %}
+        </div>
+        <small style="color: var(--text-muted);">
+            Global cooldown: {{ global_cooldown_status.total_seconds }}s
+        </small>
+    </div>
+    <button class="btn btn-sm btn-warning"
+            hx-post="/cooldown/force-unpause"
+            hx-target="#rate-limit-display"
+            hx-swap="innerHTML"
+            title="Force unpause the Twitch reward">
+        Unpause
+    </button>
+</div>
+{% elif global_cooldown_status and global_cooldown_status.total_seconds > 0 %}
+<div class="rate-limit-status" style="margin-top: 0.75rem;">
+    <div class="indicator ready"></div>
+    <div>
+        <div class="countdown">Reward active</div>
+        <small style="color: var(--text-muted);">
+            Global cooldown: {{ global_cooldown_status.total_seconds }}s after narration
+        </small>
+    </div>
+</div>
+{% endif %}

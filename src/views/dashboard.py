@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from src.api.dependencies import AppStateDep, TemplatesDep
+# TC001 ignored: FastAPI Depends() requires these at runtime for dependency injection
+from src.api.dependencies import AppStateDep, TemplatesDep  # noqa: TC001
 
 router = APIRouter()
 
@@ -97,11 +98,32 @@ async def rate_limit_status_partial(
 ) -> HTMLResponse:
     """Get rate limit status partial for HTMX polling."""
     rate_status = state.rate_limiter.get_status()
+    global_cooldown_status = (
+        state.global_cooldown.get_status() if state.global_cooldown else None
+    )
 
     return templates.TemplateResponse(
         request,
         "partials/rate_limit_status.html",
         {
             "rate_status": rate_status,
+            "global_cooldown_status": global_cooldown_status,
         },
     )
+
+
+@router.post("/cooldown/force-unpause", response_class=HTMLResponse)
+async def force_unpause_cooldown(
+    request: Request,
+    state: AppStateDep,
+    templates: TemplatesDep,
+) -> HTMLResponse:
+    """Force unpause the Twitch reward (admin override).
+
+    Immediately ends the global cooldown and unpauses the reward.
+    """
+    if state.global_cooldown:
+        await state.global_cooldown.force_unpause()
+
+    # Return updated rate limit status partial
+    return await rate_limit_status_partial(request, state, templates)

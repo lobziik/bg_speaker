@@ -135,6 +135,24 @@ class RateLimitStatusMessage(TypedDict):
     queue_length: int
 
 
+class GlobalCooldownStatusMessage(TypedDict):
+    """Sent when global Twitch reward cooldown status changes.
+
+    Indicates whether the Twitch reward is paused due to global cooldown.
+
+    Attributes:
+        type: Message type identifier.
+        is_active: Whether a cooldown is currently active (reward paused).
+        remaining_seconds: Seconds until cooldown ends (if active).
+        total_seconds: Configured cooldown duration.
+    """
+
+    type: Literal["global_cooldown_status"]
+    is_active: bool
+    remaining_seconds: float | None
+    total_seconds: int
+
+
 class ConnectionAckMessage(TypedDict):
     """Sent on successful WebSocket connection.
 
@@ -175,6 +193,7 @@ ServerMessage = (
     | NarrationErrorMessage
     | QueueUpdateMessage
     | RateLimitStatusMessage
+    | GlobalCooldownStatusMessage
     | ConnectionAckMessage
     | PingMessage
 )

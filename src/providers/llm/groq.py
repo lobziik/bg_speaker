@@ -1,17 +1,22 @@
 """Groq LLM provider implementation."""
 
-from collections.abc import AsyncIterator
-from typing import ClassVar
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, ClassVar
 
 import structlog
 from groq import APIConnectionError, APIStatusError, AsyncGroq
-from groq.types.chat import (
-    ChatCompletionSystemMessageParam,
-    ChatCompletionUserMessageParam,
-)
 from pydantic import SecretStr
 
 from src.providers.llm.base import LLMProvider, LLMResponse, Model
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from groq.types.chat import (
+        ChatCompletionSystemMessageParam,
+        ChatCompletionUserMessageParam,
+    )
 
 logger = structlog.get_logger()
 

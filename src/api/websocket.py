@@ -23,6 +23,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 from src.api.ws_types import (
     AudioDataMessage,
     ConnectionAckMessage,
+    GlobalCooldownStatusMessage,
     NarrationEndMessage,
     NarrationErrorMessage,
     NarrationStartMessage,
@@ -297,6 +298,27 @@ class WebSocketManager:
             "tts_available": status.tts_available,
             "tts_available_in_seconds": status.tts_available_in_seconds,
             "queue_length": len(items),
+        }
+        await self._broadcast(message)
+
+    async def broadcast_global_cooldown_status(
+        self,
+        is_active: bool,
+        remaining_seconds: float | None,
+        total_seconds: int,
+    ) -> None:
+        """Broadcast global Twitch reward cooldown status to all clients.
+
+        Args:
+            is_active: Whether cooldown is currently active (reward paused).
+            remaining_seconds: Seconds until cooldown ends (if active).
+            total_seconds: Configured cooldown duration.
+        """
+        message: GlobalCooldownStatusMessage = {
+            "type": "global_cooldown_status",
+            "is_active": is_active,
+            "remaining_seconds": remaining_seconds,
+            "total_seconds": total_seconds,
         }
         await self._broadcast(message)
 
