@@ -84,6 +84,52 @@
             <button type="submit" class="btn btn-primary">Save TTS Voice Settings</button>
         </div>
     </form>
+
+    <!-- Sound Quality Section -->
+    <div class="form-section" style="margin-top: 2rem;">
+        <div class="form-section-title">Sound Quality</div>
+        <form hx-post="/settings/tts_provider"
+              hx-target="#toast-container"
+              hx-swap="innerHTML">
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="length_scale">Speech Speed</label>
+                    <div class="range-container">
+                        <input type="range" name="length_scale" id="length_scale"
+                               min="0.5" max="2.0" step="0.1"
+                               value="{{ piper.length_scale }}">
+                        <span class="range-value">{{ piper.length_scale }}</span>
+                    </div>
+                    <small class="help-text">0.5 = fast, 1.0 = normal, 2.0 = slow</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="noise_scale">Pronunciation Variation</label>
+                    <div class="range-container">
+                        <input type="range" name="noise_scale" id="noise_scale"
+                               min="0.0" max="1.0" step="0.05"
+                               value="{{ piper.noise_scale }}">
+                        <span class="range-value">{{ piper.noise_scale }}</span>
+                    </div>
+                    <small class="help-text">0 = monotone, 1 = varied</small>
+                </div>
+            </div>
+
+            <input type="hidden" name="noise_w" value="{{ piper.noise_w }}">
+
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">Save TTS Settings</button>
+                <button type="button" class="btn btn-secondary"
+                        hx-post="/settings/tts_provider/test"
+                        hx-include="closest form"
+                        hx-target="#tts-test-result">
+                    Test Voice
+                </button>
+            </div>
+        </form>
+        <div id="tts-test-result" style="margin-top: 1rem;"></div>
+    </div>
 </div>
 
 <!-- Narrator Settings -->

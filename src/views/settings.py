@@ -15,6 +15,7 @@ from src.models.settings import (
     LanguageSettings,
     NarratorSettings,
     OverlaySettings,
+    PiperSettings,
     QueueSettings,
     TTSVoiceSettings,
     TwitchRewardSettings,
@@ -53,6 +54,7 @@ async def settings_page(
     tts_voice = await settings_repo.get(
         "tts_voice", TTSVoiceSettings, TTSVoiceSettings()
     )
+    piper = await settings_repo.get("piper", PiperSettings, PiperSettings())
 
     # Get available providers from environment
     available_llm = state.env.get_available_llm_providers()
@@ -87,6 +89,7 @@ async def settings_page(
             "overlay": overlay,
             "reward": reward,
             "tts_voice": tts_voice,
+            "piper": piper,
             "language_codes": list(LanguageCode),
             "narrator_styles": list(NarratorStyle),
             "available_llm": available_llm,
@@ -270,3 +273,103 @@ async def save_tts_voice_settings(
         content="<div class='toast success'>TTS voice settings saved</div>",
         headers=_toast_response("TTS voice settings saved"),
     )
+
+
+@router.post("/settings/tts_provider", response_class=HTMLResponse)
+async def save_tts_provider_settings(
+    request: Request,
+    state: AppStateDep,
+    settings_repo: SettingsRepoDep,
+) -> Response:
+    """Save TTS provider settings (speed, variation).
+
+    Updates Piper TTS settings and applies them to the running provider.
+    """
+    form_data = await request.form()
+
+    settings = PiperSettings(
+        length_scale=float(str(form_data["length_scale"])),
+        noise_scale=float(str(form_data["noise_scale"])),
+        noise_w=float(str(form_data.get("noise_w", 0.8))),
+    )
+
+    await settings_repo.set("piper", settings)
+
+    # Update running provider if pipeline exists
+    if state.pipeline:
+        state.pipeline.tts_provider.update_settings(
+            length_scale=settings.length_scale,
+            noise_scale=settings.noise_scale,
+            noise_w=settings.noise_w,
+        )
+
+    return Response(
+        content="<div class='toast success'>TTS settings saved</div>",
+        headers=_toast_response("TTS settings saved"),
+    )
+
+
+@router.post("/settings/tts_provider/test", response_class=HTMLResponse)
+async def test_tts_provider(
+    request: Request,
+    state: AppStateDep,
+    templates: TemplatesDep,
+) -> HTMLResponse:
+    """Test TTS with current form settings without saving.
+
+    Synthesizes a test phrase and returns audio for playback.
+    """
+    import base64
+
+    form_data = await request.form()
+
+    if not state.pipeline:
+        return templates.TemplateResponse(
+            request,
+            "partials/tts_test_result.html",
+            {"success": False, "error": "Pipeline not initialized"},
+        )
+
+    try:
+        length_scale = float(str(form_data.get("length_scale", 1.0)))
+        noise_scale = float(str(form_data.get("noise_scale", 0.667)))
+        noise_w = float(str(form_data.get("noise_w", 0.8)))
+
+        # Temporarily update settings for test
+        tts = state.pipeline.tts_provider
+        original_settings = (
+            tts._settings.length_scale,  # type: ignore[attr-defined]
+            tts._settings.noise_scale,  # type: ignore[attr-defined]
+            tts._settings.noise_w,  # type: ignore[attr-defined]
+        )
+        tts.update_settings(
+            length_scale=length_scale,
+            noise_scale=noise_scale,
+            noise_w=noise_w,
+        )
+
+        # Synthesize test phrase
+        test_text = "Greetings, adventurer. Your voice settings have been configured."
+        audio_data = await tts.synthesize(test_text)
+
+        # Restore original settings
+        tts.update_settings(
+            length_scale=original_settings[0],
+            noise_scale=original_settings[1],
+            noise_w=original_settings[2],
+        )
+
+        # Return audio as base64 for playback
+        audio_b64 = base64.b64encode(audio_data).decode()
+
+        return templates.TemplateResponse(
+            request,
+            "partials/tts_test_result.html",
+            {"success": True, "audio_data": audio_b64},
+        )
+    except Exception as e:
+        return templates.TemplateResponse(
+            request,
+            "partials/tts_test_result.html",
+            {"success": False, "error": str(e)},
+        )

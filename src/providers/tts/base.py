@@ -113,3 +113,21 @@ class TTSProvider(Protocol):
     def get_settings_schema(self) -> dict[str, object]:
         """JSON Schema for provider settings."""
         ...
+
+    def update_settings(
+        self,
+        *,
+        length_scale: float | None = None,
+        noise_scale: float | None = None,
+        noise_w: float | None = None,
+    ) -> None:
+        """Update TTS synthesis settings at runtime.
+
+        Provider implementations may support different subsets of these parameters.
+
+        Args:
+            length_scale: Speech speed (0.5=fast, 1.0=normal, 2.0=slow).
+            noise_scale: Pronunciation variation (0=monotone, 1=varied).
+            noise_w: Phoneme duration variation (0=consistent, 1=varied).
+        """
+        ...

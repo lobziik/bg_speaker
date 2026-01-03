@@ -305,6 +305,38 @@ class PiperTTSProvider:
         """Piper doesn't support voice cloning."""
         return False
 
+    def update_settings(
+        self,
+        *,
+        length_scale: float | None = None,
+        noise_scale: float | None = None,
+        noise_w: float | None = None,
+    ) -> None:
+        """Update TTS synthesis settings at runtime.
+
+        Updates the internal settings without recreating the provider.
+        Changed settings will apply to subsequent synthesize() calls.
+
+        Args:
+            length_scale: Speech speed (0.5=fast, 1.0=normal, 2.0=slow).
+            noise_scale: Pronunciation variation (0=monotone, 1=varied).
+            noise_w: Phoneme duration variation (0=consistent, 1=varied).
+        """
+        self._settings = PiperSettings(
+            voice=self._settings.voice,
+            model_path=self._settings.model_path,
+            speaker_id=self._settings.speaker_id,
+            length_scale=length_scale if length_scale is not None else self._settings.length_scale,
+            noise_scale=noise_scale if noise_scale is not None else self._settings.noise_scale,
+            noise_w=noise_w if noise_w is not None else self._settings.noise_w,
+        )
+        logger.info(
+            "piper_settings_updated",
+            length_scale=self._settings.length_scale,
+            noise_scale=self._settings.noise_scale,
+            noise_w=self._settings.noise_w,
+        )
+
     def get_voice_for_language(self, lang: LanguageCode) -> str:
         """Get the voice ID for a given language.
 

@@ -1,0 +1,14 @@
+{% if success %}
+<div class="test-result success">
+    <div class="result-title">Voice Test</div>
+    <audio controls autoplay style="width: 100%; margin-top: var(--spacing-sm);">
+        <source src="data:audio/wav;base64,{{ audio_data }}" type="audio/wav">
+        Your browser does not support audio playback.
+    </audio>
+</div>
+{% else %}
+<div class="test-result error">
+    <div class="result-title">Test Failed</div>
+    <p>{{ error }}</p>
+</div>
+{% endif %}

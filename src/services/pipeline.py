@@ -52,6 +52,14 @@ class NarrationPipeline:
         self._tts = tts_provider
         self._custom_prompt = custom_prompt
 
+    @property
+    def tts_provider(self) -> TTSProvider:
+        """Get the TTS provider instance.
+
+        Allows external access for updating provider settings at runtime.
+        """
+        return self._tts
+
     async def process(
         self,
         request: NarrationRequest,
