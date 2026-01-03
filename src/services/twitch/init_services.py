@@ -42,6 +42,7 @@ class TwitchInitError(Exception):
 async def initialize_twitch_services(
     state: AppState,
     access_token: str,
+    refresh_token: str,
     broadcaster_id: str,
 ) -> bool:
     """Initialize EventSub and RewardController.
@@ -53,6 +54,7 @@ async def initialize_twitch_services(
     Args:
         state: Application state to populate with initialized services.
         access_token: Valid OAuth token with required scopes.
+        refresh_token: Refresh token for automatic token renewal by twitchio.
         broadcaster_id: Twitch user ID (numeric string).
 
     Returns:
@@ -117,7 +119,7 @@ async def initialize_twitch_services(
         eventsub.on_redemption(handler)
 
         # Start EventSub connection
-        await eventsub.start(access_token)
+        await eventsub.start(access_token, refresh_token)
         logger.info("twitch_eventsub_started")
 
         # Step 3: Update application state

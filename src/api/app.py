@@ -75,6 +75,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             success = await initialize_twitch_services(
                 state=state,
                 access_token=twitch_state.access_token,
+                refresh_token=twitch_state.refresh_token,
                 broadcaster_id=twitch_state.broadcaster_id,
             )
             if success:

@@ -156,11 +156,12 @@ class TwitchEventSubService:
         """
         self._redemption_handlers.append(handler)
 
-    async def start(self, access_token: str) -> None:
+    async def start(self, access_token: str, refresh_token: str) -> None:
         """Start EventSub WebSocket connection.
 
         Args:
             access_token: Valid OAuth token with required scopes.
+            refresh_token: Refresh token for automatic token renewal.
 
         Raises:
             EventSubConnectionError: If connection fails.
@@ -184,8 +185,8 @@ class TwitchEventSubService:
                 redemption_callback=self._handle_redemption,
             )
 
-            # Add the user token for subscriptions
-            await self._client.add_token(access_token, self._broadcaster_id)
+            # Add the user token for subscriptions (token + refresh for auto-renewal)
+            await self._client.add_token(access_token, refresh_token)
             logger.info(
                 "eventsub_token_added",
                 broadcaster_id=self._broadcaster_id,

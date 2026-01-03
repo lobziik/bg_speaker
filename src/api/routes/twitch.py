@@ -98,6 +98,7 @@ async def oauth_callback(
         success = await initialize_twitch_services(
             state=state,
             access_token=tokens.access_token,
+            refresh_token=tokens.refresh_token,
             broadcaster_id=tokens.user_id,
         )
         if success:
