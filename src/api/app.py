@@ -5,10 +5,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import structlog
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from src.api.auth import require_auth
 from src.api.dependencies import get_app_state
 from src.api.middleware import AccessLogMiddleware
 from src.api.routes import health, overlay, test, twitch
@@ -167,20 +168,29 @@ def create_app() -> FastAPI:
     if STATIC_PATH.exists():
         app.mount("/static", StaticFiles(directory=STATIC_PATH), name="static")
 
-    # Include API routers
+    # Auth dependency for protected routes
+    auth_dependency = [Depends(require_auth)]
+
+    # Include API routers (unprotected)
     app.include_router(health.router, tags=["Health"])
-    app.include_router(twitch.router, prefix="/auth", tags=["Twitch OAuth"])
-    app.include_router(test.router, prefix="/api", tags=["Test"])
     app.include_router(overlay.router, tags=["Overlay"])
 
-    # Include view routers (Web UI)
+    # Twitch OAuth routes (login/callback/status unprotected, logout protected in route)
+    app.include_router(twitch.router, prefix="/auth", tags=["Twitch OAuth"])
+
+    # Protected API routes
+    app.include_router(
+        test.router, prefix="/api", tags=["Test"], dependencies=auth_dependency
+    )
+
+    # Include view routers (Web UI) - all protected
     from src.views import dashboard, logs, queue, settings
     from src.views import test as test_view
 
-    app.include_router(dashboard.router, tags=["Views"])
-    app.include_router(settings.router, tags=["Views"])
-    app.include_router(queue.router, tags=["Views"])
-    app.include_router(test_view.router, tags=["Views"])
-    app.include_router(logs.router, tags=["Views"])
+    app.include_router(dashboard.router, tags=["Views"], dependencies=auth_dependency)
+    app.include_router(settings.router, tags=["Views"], dependencies=auth_dependency)
+    app.include_router(queue.router, tags=["Views"], dependencies=auth_dependency)
+    app.include_router(test_view.router, tags=["Views"], dependencies=auth_dependency)
+    app.include_router(logs.router, tags=["Views"], dependencies=auth_dependency)
 
     return app

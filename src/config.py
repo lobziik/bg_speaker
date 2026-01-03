@@ -45,6 +45,18 @@ class EnvSettings(BaseSettings):
     secret_key: SecretStr = SecretStr("dev-secret-key-change-in-production")
     database_url: str = "sqlite:///data/narrator.db"
 
+    # Basic Auth for admin dashboard
+    admin_username: str = ""
+    admin_password: SecretStr = SecretStr("")
+
+    def has_basic_auth_configured(self) -> bool:
+        """Check if Basic Auth credentials are configured.
+
+        Returns:
+            True if both admin_username and admin_password are set.
+        """
+        return bool(self.admin_username and self.admin_password.get_secret_value())
+
     # Paths
     prompts_path: Path = Path("config/prompts")
     models_path: Path = Path("models")

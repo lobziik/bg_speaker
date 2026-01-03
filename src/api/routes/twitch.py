@@ -7,6 +7,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 
+from src.api.auth import RequireAuthDep
 from src.api.dependencies import AppStateDep
 from src.db.repositories.twitch_state import TwitchStateRepository
 from src.services.twitch.auth import InvalidGrantError, TwitchAuthError
@@ -21,10 +22,16 @@ _oauth_states: set[str] = set()
 
 
 @router.get("/login")
-async def login(state: AppStateDep) -> RedirectResponse:
+async def login(state: AppStateDep, _username: RequireAuthDep) -> RedirectResponse:
     """Initiate Twitch OAuth flow.
 
+    Requires Basic Auth.
+
     Generates CSRF state token and redirects to Twitch authorization page.
+
+    Args:
+        state: Application state.
+        _username: Authenticated username (unused, ensures auth).
 
     Returns:
         Redirect to Twitch OAuth authorization URL.
@@ -121,11 +128,17 @@ async def oauth_callback(
 
 
 @router.post("/logout")
-async def logout(state: AppStateDep) -> dict[str, str]:
+async def logout(state: AppStateDep, _username: RequireAuthDep) -> dict[str, str]:
     """Clear stored Twitch tokens.
+
+    Requires Basic Auth.
 
     Stops EventSub connection, closes rewards controller, and clears
     all stored OAuth tokens.
+
+    Args:
+        state: Application state.
+        _username: Authenticated username (unused, ensures auth).
 
     Returns:
         Logout confirmation.
@@ -146,8 +159,14 @@ async def logout(state: AppStateDep) -> dict[str, str]:
 
 
 @router.get("/status")
-async def auth_status(state: AppStateDep) -> dict[str, object]:
+async def auth_status(state: AppStateDep, _username: RequireAuthDep) -> dict[str, object]:
     """Get current Twitch authorization status.
+
+    Requires Basic Auth.
+
+    Args:
+        state: Application state.
+        _username: Authenticated username (unused, ensures auth).
 
     Returns:
         Authorization status and connected user info.
