@@ -66,7 +66,7 @@ class TTSProvider(Protocol):
         """
         ...
 
-    async def synthesize_stream(
+    def synthesize_stream(
         self,
         text: str,
         voice_id: str | None = None,

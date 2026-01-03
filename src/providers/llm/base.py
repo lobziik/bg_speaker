@@ -56,7 +56,7 @@ class LLMProvider(Protocol):
         """
         ...
 
-    async def generate_stream(
+    def generate_stream(
         self,
         user: str,
         message: str,

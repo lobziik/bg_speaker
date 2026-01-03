@@ -87,6 +87,8 @@ Providers implement `get_settings_schema()` returning JSON Schema for dynamic We
 - TypedDict for WebSocket message types
 - No `Any` types - explicit types everywhere
 - mypy strict mode enforced in CI
+- ty additionally for typechecks
+- no '# type: ignore' without implicit asking and additional extended comment to explain why.
 
 ## Fail fast and LOUD
 Never do `except Exception:`. Always narrow down the exception type and handle it properly.

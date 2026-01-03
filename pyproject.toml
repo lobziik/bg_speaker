@@ -12,28 +12,19 @@ dependencies = [
     "python-multipart>=0.0.12",
     "jinja2>=3.1.0",
     "websockets>=13.0",
-
     # Data validation
     "pydantic>=2.9.0",
     "pydantic-settings>=2.5.0",
-
     # Database
     "aiosqlite>=0.20.0",
-
     # Twitch
     "twitchio>=3.0.0",
-
     # HTTP client
     "httpx>=0.27.0",
-
     # TTS
     "piper-tts>=1.2.0",
-
     # LLM clients
     "groq>=0.11.0",
-#    "openai>=1.50.0",
-#    "anthropic>=0.34.0",
-
     # Utilities
     "structlog>=24.0.0",
     "tenacity>=9.0.0",
@@ -41,9 +32,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-elevenlabs = [
-    "elevenlabs>=1.0.0",
-]
 
 dev = [
     "pytest>=8.0.0",
@@ -52,6 +40,7 @@ dev = [
     "mypy>=1.11.0",
     "ruff>=0.6.0",
     "pre-commit>=3.8.0",
+    "ty>=0.0.8",
 ]
 
 [build-system]
