@@ -38,8 +38,8 @@ def get_piper_cache_dir() -> Path:
     Returns:
         Path to cache directory (created if doesn't exist)
     """
-    # Use standard cache location
-    cache_dir = Path.home() / ".local" / "share" / "piper-tts"
+    # Store cache in data/ folder next to the database
+    cache_dir = Path("data/piper-tts")
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
 
