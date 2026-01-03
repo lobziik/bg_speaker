@@ -8,6 +8,7 @@ A Twitch Channel Points integration that reads chat messages in the dramatic voi
 - **D&D Narrator Style**: LLM transforms casual chat into dramatic narrator prose
 - **Fast Local TTS**: Piper TTS with high-quality pre-trained voices (MIT license)
 - **Web UI Dashboard**: BG3-themed configuration interface with HTMX
+- **Auto-Reconnect**: Twitch services auto-connect on startup if previously authorized
 - **Configurable Languages**: Source, narrator, and subtitle languages are independent
 - **Provider Abstraction**: Swappable LLM, TTS, and Translation providers
 - **Priority Queue**: VIP users processed first, with rate limiting
@@ -62,6 +63,8 @@ LOG_FORMAT=console      # console (human-readable) or json (for Railway/producti
 4. Start server: `uv run python -m src.main serve`
 5. Visit `http://localhost:8000/auth/login` to authorize
 6. Check status at `http://localhost:8000/auth/status`
+
+**Auto-connect**: Once authorized, Twitch services auto-reconnect on server restart. Use the Logout button in the dashboard to disconnect.
 
 ## Requirements
 

@@ -67,6 +67,7 @@ Piper automatically selects the appropriate voice based on the configured `narra
 - The `language` parameter flows: Worker → Pipeline → TTS `synthesize()`
 
 ### Service Layer (`src/services/`)
+- `twitch/init_services.py`: Initializes EventSub + RewardController (at startup or after OAuth)
 - `twitch/eventsub.py`: TwitchIO 3.x EventSub WebSocket for Channel Points redemptions
 - `twitch/rewards.py`: Manages Channel Points reward lifecycle (create/pause/fulfill/cancel)
 - `pipeline.py`: Orchestrates LLM → TTS flow
@@ -74,6 +75,19 @@ Piper automatically selects the appropriate voice based on the configured `narra
 - `rate_limiter.py`: Global TTS rate limit + per-user cooldowns
 - `global_cooldown.py`: Global Twitch reward cooldown (pauses reward after each narration)
 - `worker.py`: Background queue processor that runs pipeline and broadcasts via WebSocket
+
+### Twitch Service Initialization
+Twitch services (EventSub + RewardController) are initialized in two scenarios:
+1. **At app startup**: If OAuth tokens exist in DB, auto-connects to Twitch
+2. **After OAuth callback**: Immediately after user authorizes, services start
+
+The initialization flow (`src/services/twitch/init_services.py`):
+1. Create `TwitchRewardController` and find/create the Channel Points reward
+2. Save `reward_id` to DB for persistence across restarts
+3. Create `TwitchEventSubService` with handler that queues redemptions
+4. Wire up `GlobalCooldownManager` to pause reward after narrations
+
+On failure: logs warning and continues without Twitch (dashboard shows "disconnected").
 
 ### Data Layer
 - SQLite database at `data/narrator.db`
