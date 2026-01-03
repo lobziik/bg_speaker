@@ -58,11 +58,19 @@ class SettingsRepository:
 
             # Parse JSON and filter to only known fields for backward compatibility.
             # This handles cases where fields were removed from the model.
-            data = json.loads(row[0])
+            data: dict[str, object] = json.loads(row[0])
             known_fields = set(model.model_fields.keys())
-            filtered_data = {k: v for k, v in data.items() if k in known_fields}
+            unknown_fields = set(data.keys()) - known_fields
 
-            return model.model_validate(filtered_data)
+            if unknown_fields:
+                # Filter out unknown fields and re-serialize for model_validate_json.
+                # This handles backward compatibility when fields are removed.
+                filtered_data = {k: v for k, v in data.items() if k in known_fields}
+                return model.model_validate_json(json.dumps(filtered_data))
+
+            # Use model_validate_json for proper datetime parsing in strict mode.
+            # This is necessary because strict=True doesn't coerce strings to datetime.
+            return model.model_validate_json(row[0])
 
     async def set(self, key: str, value: T) -> None:
         """Save typed setting.
