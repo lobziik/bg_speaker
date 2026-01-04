@@ -1,0 +1,83 @@
+{% if error %}
+<div class="log-detail-content">
+    <div class="log-detail-header">
+        <h4>Error</h4>
+        <button class="log-detail-close" onclick="var m=document.getElementById('log-detail-modal'); m.innerHTML=''; m.classList.remove('active');">&times;</button>
+    </div>
+    <p class="detail-error">{{ error }}</p>
+</div>
+{% elif log %}
+<div class="log-detail-content">
+    <div class="log-detail-header">
+        <h4>Narration Details</h4>
+        <button class="log-detail-close" onclick="var m=document.getElementById('log-detail-modal'); m.innerHTML=''; m.classList.remove('active');">&times;</button>
+    </div>
+
+    <div class="log-detail-meta">
+        <span class="detail-user">{{ log.user }}</span>
+        <span class="detail-time">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+        {% if log.status == 'success' %}
+            <span class="badge badge-success">Success</span>
+        {% elif log.status == 'error' %}
+            <span class="badge badge-error">Error</span>
+        {% elif log.status == 'moderation_rejected' %}
+            <span class="badge badge-warning">Rejected</span>
+        {% else %}
+            <span class="badge">{{ log.status }}</span>
+        {% endif %}
+    </div>
+
+    <div class="detail-section">
+        <strong>Original Message:</strong>
+        <p class="detail-text">{{ log.message_original }}</p>
+    </div>
+
+    {% if log.text_formatted %}
+    <div class="detail-section">
+        <strong>Voice Text (TTS Input):</strong>
+        <p class="detail-text">{{ log.text_formatted }}</p>
+    </div>
+    {% endif %}
+
+    {% if log.text_translated %}
+    <div class="detail-section">
+        <strong>Subtitle Text:</strong>
+        <p class="detail-text">{{ log.text_translated }}</p>
+    </div>
+    {% endif %}
+
+    {% if log.rejection_reason %}
+    <div class="detail-section detail-section-error">
+        <strong>Rejection Reason:</strong>
+        <p class="detail-text detail-error-text">{{ log.rejection_reason }}</p>
+    </div>
+    {% endif %}
+
+    {% if log.error_message %}
+    <div class="detail-section detail-section-error">
+        <strong>Error Message:</strong>
+        <p class="detail-text detail-error-text">{{ log.error_message }}</p>
+    </div>
+    {% endif %}
+
+    {% if log.latency_moderation_ms or log.latency_llm_ms or log.latency_tts_ms %}
+    <div class="detail-section detail-section-latency">
+        <strong>Latency:</strong>
+        <div class="latency-grid">
+            {% if log.latency_moderation_ms %}
+            <span>Mod: {{ log.latency_moderation_ms }}ms</span>
+            {% endif %}
+            {% if log.latency_llm_ms %}
+            <span>LLM: {{ log.latency_llm_ms }}ms</span>
+            {% endif %}
+            {% if log.latency_tts_ms %}
+            <span>TTS: {{ log.latency_tts_ms }}ms</span>
+            {% endif %}
+            {% if log.latency_total_ms %}
+            <span><strong>Total: {{ log.latency_total_ms }}ms</strong></span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}

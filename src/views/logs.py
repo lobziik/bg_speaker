@@ -122,3 +122,38 @@ async def logs_table_partial(
             "filters": filters,
         },
     )
+
+
+@router.get("/logs/partials/detail/{log_id}", response_class=HTMLResponse)
+async def log_detail_partial(
+    log_id: str,
+    request: Request,
+    state: AppStateDep,
+    templates: TemplatesDep,
+) -> HTMLResponse:
+    """Get log detail partial for HTMX popover.
+
+    Args:
+        log_id: The unique log ID to fetch details for.
+        request: FastAPI request object.
+        state: Application state with database connection.
+        templates: Jinja2 templates instance.
+
+    Returns:
+        HTML partial with log details or error message.
+    """
+    log_repo = NarrationLogRepository(state.db.connection)
+    log = await log_repo.get_by_id(log_id)
+
+    if log is None:
+        return templates.TemplateResponse(
+            request,
+            "partials/log_detail.html",
+            {"log": None, "error": "Log entry not found"},
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "partials/log_detail.html",
+        {"log": log, "error": None},
+    )

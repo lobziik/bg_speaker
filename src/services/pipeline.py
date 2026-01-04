@@ -26,6 +26,7 @@ class ModerationRejectedError(Exception):
         message: The original user message that was rejected.
         reason: Human-readable explanation of why it was rejected.
         category: Category of violation (e.g., "hate_speech", "sexual_content").
+        latency_ms: Time spent on moderation check in milliseconds.
     """
 
     def __init__(
@@ -33,6 +34,7 @@ class ModerationRejectedError(Exception):
         message: str,
         reason: str,
         category: str = "policy_violation",
+        latency_ms: int = 0,
     ) -> None:
         """Initialize the exception.
 
@@ -40,10 +42,12 @@ class ModerationRejectedError(Exception):
             message: The original user message that was rejected.
             reason: Human-readable explanation of why it was rejected.
             category: Category of violation.
+            latency_ms: Time spent on moderation check in milliseconds.
         """
         self.message = message
         self.reason = reason
         self.category = category
+        self.latency_ms = latency_ms
         super().__init__(f"Moderation rejected: {reason}")
 
 
@@ -135,16 +139,19 @@ class NarrationPipeline:
             result = await self._llm.moderate(user=user, message=message)
         except LLMResponseParseError as e:
             # FAIL FAST: If we can't parse moderation response, reject
+            parse_error_latency_ms = int((time.monotonic() - moderation_start) * 1000)
             logger.error(
                 "pipeline_moderation_parse_error",
                 request_id=request_id,
                 raw_response=e.raw_response,
                 error=e.parse_error,
+                latency_ms=parse_error_latency_ms,
             )
             raise ModerationRejectedError(
                 message=message,
                 reason="Moderation check failed - cannot verify content safety",
                 category="parse_error",
+                latency_ms=parse_error_latency_ms,
             ) from e
 
         moderation_latency_ms = int((time.monotonic() - moderation_start) * 1000)
@@ -163,6 +170,7 @@ class NarrationPipeline:
                 message=message,
                 reason=result.reason,
                 category=result.category,
+                latency_ms=moderation_latency_ms,
             )
 
         return moderation_latency_ms

@@ -195,6 +195,7 @@ class QueueWorker:
                 status="success",
                 narrator_lang=narrator_lang.value,
                 subtitle_lang=subtitle_lang.value,
+                moderation_latency_ms=metrics.moderation_latency_ms,
                 llm_latency_ms=metrics.llm_latency_ms,
                 tts_latency_ms=metrics.tts_latency_ms,
                 total_latency_ms=metrics.llm_latency_ms + metrics.tts_latency_ms,
@@ -235,7 +236,8 @@ class QueueWorker:
                 item=item,
                 result=None,
                 status="moderation_rejected",
-                error_message=f"[{e.category}] {e.reason}",
+                moderation_latency_ms=e.latency_ms,
+                rejection_reason=f"[{e.category}] {e.reason}",
             )
 
             # Broadcast moderation error to clients
@@ -315,9 +317,11 @@ class QueueWorker:
         status: str,
         narrator_lang: str = "en",
         subtitle_lang: str = "en",
+        moderation_latency_ms: int | None = None,
         llm_latency_ms: int | None = None,
         tts_latency_ms: int | None = None,
         total_latency_ms: int | None = None,
+        rejection_reason: str | None = None,
         error_message: str | None = None,
     ) -> None:
         """Log narration to database.
@@ -328,9 +332,11 @@ class QueueWorker:
             status: Status of the narration (success, error, etc.).
             narrator_lang: Language for TTS output.
             subtitle_lang: Language for subtitles.
+            moderation_latency_ms: Moderation check time.
             llm_latency_ms: LLM processing time.
             tts_latency_ms: TTS processing time.
             total_latency_ms: Total processing time.
+            rejection_reason: Reason for rejection if moderation_rejected.
             error_message: Error message if failed.
         """
         if not self._db_connection:
@@ -349,9 +355,11 @@ class QueueWorker:
                 subtitle_lang=subtitle_lang,
                 llm_provider="groq",  # TODO: Get from pipeline
                 tts_provider="piper",  # TODO: Get from pipeline
+                latency_moderation_ms=moderation_latency_ms,
                 latency_llm_ms=llm_latency_ms,
                 latency_tts_ms=tts_latency_ms,
                 latency_total_ms=total_latency_ms,
+                rejection_reason=rejection_reason,
                 error_message=error_message,
             )
         except Exception as log_error:

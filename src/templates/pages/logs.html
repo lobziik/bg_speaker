@@ -28,6 +28,7 @@
             <option value="">All</option>
             <option value="success" {% if filters.status == 'success' %}selected{% endif %}>Success</option>
             <option value="error" {% if filters.status == 'error' %}selected{% endif %}>Error</option>
+            <option value="moderation_rejected" {% if filters.status == 'moderation_rejected' %}selected{% endif %}>Rejected</option>
             <option value="filtered" {% if filters.status == 'filtered' %}selected{% endif %}>Filtered</option>
             <option value="rate_limited" {% if filters.status == 'rate_limited' %}selected{% endif %}>Rate Limited</option>
         </select>
@@ -57,7 +58,7 @@
 </div>
 
 <!-- Stats Summary -->
-<div class="grid grid-4" style="margin-bottom: var(--spacing-lg);">
+<div class="grid grid-5" style="margin-bottom: var(--spacing-lg);">
     <div class="stat-card">
         <div class="stat-value">{{ stats.total_count }}</div>
         <div class="stat-label">Total</div>
@@ -69,6 +70,10 @@
     <div class="stat-card">
         <div class="stat-value" style="color: var(--error);">{{ stats.error_count }}</div>
         <div class="stat-label">Errors</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: var(--warning);">{{ stats.moderation_rejected_count }}</div>
+        <div class="stat-label">Rejected</div>
     </div>
     <div class="stat-card">
         <div class="stat-value">
@@ -88,4 +93,35 @@
         {% include "partials/log_table.html" %}
     </div>
 </div>
+
+<!-- Log Detail Modal -->
+<div id="log-detail-modal" class="log-detail-modal"></div>
+
+<script>
+(function() {
+    const modal = document.getElementById('log-detail-modal');
+
+    function closeModal() {
+        modal.innerHTML = '';
+        modal.classList.remove('active');
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeModal();
+    });
+
+    // Close modal on overlay click
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) closeModal();
+    });
+
+    // Show modal when content is swapped in
+    document.body.addEventListener('htmx:afterSwap', function(e) {
+        if (e.detail.target.id === 'log-detail-modal') {
+            modal.classList.add('active');
+        }
+    });
+})();
+</script>
 {% endblock %}
