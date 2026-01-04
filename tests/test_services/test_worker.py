@@ -51,6 +51,7 @@ def mock_pipeline() -> MagicMock:
         duration_ms=1000,
     )
     sample_metrics = PipelineMetrics(
+        moderation_latency_ms=0,
         llm_latency_ms=100,
         tts_latency_ms=200,
         total_latency_ms=300,
@@ -218,6 +219,7 @@ class TestWorkerProcessing:
             duration_ms=10,  # Very short duration
         )
         fast_metrics = PipelineMetrics(
+            moderation_latency_ms=0,
             llm_latency_ms=1,
             tts_latency_ms=1,
             total_latency_ms=2,
@@ -298,6 +300,7 @@ class TestWorkerErrorHandling:
             duration_ms=100,
         )
         sample_metrics = PipelineMetrics(
+            moderation_latency_ms=0,
             llm_latency_ms=10,
             tts_latency_ms=10,
             total_latency_ms=20,
@@ -360,6 +363,7 @@ class TestWorkerWithRewards:
             duration_ms=10,
         )
         fast_metrics = PipelineMetrics(
+            moderation_latency_ms=0,
             llm_latency_ms=1,
             tts_latency_ms=1,
             total_latency_ms=2,

@@ -15,6 +15,11 @@ from src.providers.llm.base import (
     LLMResponse,
     LLMResponseParseError,
     Model,
+    ModerationResult,
+)
+from src.providers.llm.prompts import (
+    MODERATION_SYSTEM_PROMPT,
+    build_moderation_prompt,
 )
 
 if TYPE_CHECKING:
@@ -103,6 +108,7 @@ class GroqLLMProvider:
         message: str,
         system_prompt: str,
         style: str = "default",
+        model: str | None = None,
     ) -> LLMResponse:
         """Generate narrator text from user message.
 
@@ -111,6 +117,7 @@ class GroqLLMProvider:
             message: Original message.
             system_prompt: Complete system prompt including JSON format instructions.
             style: Narrator style template name.
+            model: Optional model ID override (defaults to provider's configured model).
 
         Returns:
             LLMResponse with voice_text and subtitle_text.
@@ -118,6 +125,7 @@ class GroqLLMProvider:
         Raises:
             LLMResponseParseError: If response is not valid JSON or missing fields.
         """
+        effective_model = model or self._model
         user_content = f"[{user}]: {message}"
 
         if style != "default":
@@ -127,7 +135,7 @@ class GroqLLMProvider:
         logger.info(
             "llm_prompt",
             user=user,
-            model=self._model,
+            model=effective_model,
             style=style,
             message_preview=message[:50] if len(message) > 50 else message,
             system_prompt_length=len(system_prompt),
@@ -150,7 +158,7 @@ class GroqLLMProvider:
             }
             json_format: ResponseFormatResponseFormatJsonObject = {"type": "json_object"}
             response = await self._client.chat.completions.create(
-                model=self._model,
+                model=effective_model,
                 messages=[system_msg, user_msg],
                 temperature=self._temperature,
                 max_tokens=self._max_tokens,
@@ -205,7 +213,7 @@ class GroqLLMProvider:
         logger.info(
             "llm_response",
             user=user,
-            model=self._model,
+            model=effective_model,
             voice_text_length=len(voice_text),
             subtitle_text_length=len(subtitle_text),
             voice_text_preview=voice_text[:50] if len(voice_text) > 50 else voice_text,
@@ -216,6 +224,148 @@ class GroqLLMProvider:
             subtitle_text=subtitle_text,
             raw_response=raw_text,
         )
+
+    async def generate_raw(
+        self,
+        user: str,
+        message: str,
+        system_prompt: str,
+        model: str | None = None,
+    ) -> str:
+        """Generate raw LLM response without narration validation.
+
+        Used for moderation and other non-narration tasks where the response
+        format differs from the standard narration JSON schema.
+
+        Args:
+            user: Username for logging context.
+            message: The message to send to the LLM.
+            system_prompt: Complete system prompt.
+            model: Optional model ID override (defaults to provider's configured model).
+
+        Returns:
+            Raw response text from LLM.
+
+        Raises:
+            APIConnectionError: If connection to Groq fails.
+            APIStatusError: If Groq API returns an error status.
+        """
+        effective_model = model or self._model
+        logger.debug(
+            "llm_raw_prompt",
+            user=user,
+            system_prompt_length=len(system_prompt),
+            message_length=len(message),
+        )
+
+        try:
+            system_msg: ChatCompletionSystemMessageParam = {
+                "role": "system",
+                "content": system_prompt,
+            }
+            user_msg: ChatCompletionUserMessageParam = {
+                "role": "user",
+                "content": message,
+            }
+            json_format: ResponseFormatResponseFormatJsonObject = {"type": "json_object"}
+            response = await self._client.chat.completions.create(
+                model=effective_model,
+                messages=[system_msg, user_msg],
+                temperature=self._temperature,
+                max_tokens=self._max_tokens,
+                response_format=json_format,
+            )
+        except APIConnectionError as e:
+            logger.error("groq_raw_connection_error", user=user, error=str(e))
+            raise
+        except APIStatusError as e:
+            logger.error(
+                "groq_raw_api_error",
+                user=user,
+                status_code=e.status_code,
+                error=str(e),
+            )
+            raise
+
+        raw_text = response.choices[0].message.content or ""
+
+        logger.debug(
+            "llm_raw_response",
+            user=user,
+            raw_response=raw_text,
+        )
+
+        return raw_text
+
+    async def moderate(
+        self,
+        user: str,
+        message: str,
+        model: str | None = None,
+    ) -> ModerationResult:
+        """Check message for Twitch policy compliance.
+
+        Args:
+            user: Username who sent the message.
+            message: Message to validate.
+            model: Optional model ID override (defaults to provider's configured model).
+
+        Returns:
+            ModerationResult with allowed, reason, category.
+
+        Raises:
+            LLMResponseParseError: If response cannot be parsed as ModerationResult.
+        """
+        effective_model = model or self._model
+
+        logger.debug(
+            "llm_moderate_start",
+            user=user,
+            model=effective_model,
+            message_length=len(message),
+        )
+
+        user_prompt = build_moderation_prompt(message, user)
+        raw_response = await self.generate_raw(
+            user=user,
+            message=user_prompt,
+            system_prompt=MODERATION_SYSTEM_PROMPT,
+            model=effective_model,
+        )
+
+        try:
+            parsed = json.loads(raw_response)
+            result = ModerationResult.model_validate(parsed)
+        except json.JSONDecodeError as e:
+            logger.error(
+                "llm_moderate_json_error",
+                user=user,
+                raw_response=raw_response,
+                error=str(e),
+            )
+            raise LLMResponseParseError(
+                raw_response, f"Invalid moderation JSON: {e}"
+            ) from e
+        except ValidationError as e:
+            logger.error(
+                "llm_moderate_validation_error",
+                user=user,
+                raw_response=raw_response,
+                error=str(e),
+            )
+            raise LLMResponseParseError(
+                raw_response, f"Invalid moderation response: {e}"
+            ) from e
+
+        logger.info(
+            "llm_moderate_complete",
+            user=user,
+            model=effective_model,
+            allowed=result.allowed,
+            category=result.category,
+        )
+
+        return result
 
     async def generate_stream(
         self,

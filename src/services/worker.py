@@ -18,7 +18,7 @@ from src.db.repositories.narration_log import NarrationLogRepository
 from src.db.repositories.settings import SettingsRepository
 from src.models.narration import LanguageCode, NarrationRequest, NarrationResult
 from src.models.settings import LanguageSettings, NarratorSettings, TTSVoiceSettings
-from src.services.pipeline import NarrationPipeline
+from src.services.pipeline import ModerationRejectedError, NarrationPipeline
 from src.services.queue import NarrationQueue, QueueItem
 
 if TYPE_CHECKING:
@@ -132,6 +132,7 @@ class QueueWorker:
             # Load settings from database
             bypass_llm = False
             auto_translate = True
+            enable_moderation = True
             narrator_lang = LanguageCode.EN
             subtitle_lang = LanguageCode.EN
             voice_id: str | None = None
@@ -139,13 +140,14 @@ class QueueWorker:
             if self._db_connection:
                 settings_repo = SettingsRepository(self._db_connection)
 
-                # Load narrator settings (bypass mode and auto_translate)
+                # Load narrator settings (bypass mode, auto_translate, moderation)
                 narrator_settings = await settings_repo.get(
                     "narrator", NarratorSettings, NarratorSettings()
                 )
                 if narrator_settings:
                     bypass_llm = narrator_settings.bypass_llm
                     auto_translate = narrator_settings.auto_translate
+                    enable_moderation = narrator_settings.enable_moderation
 
                 # Load language settings for TTS voice selection
                 language_settings = await settings_repo.get(
@@ -177,6 +179,7 @@ class QueueWorker:
                 auto_translate=auto_translate,
                 bypass_llm=bypass_llm,
                 voice_id=voice_id,
+                enable_moderation=enable_moderation,
             )
 
             # Broadcast to WebSocket clients
@@ -216,6 +219,48 @@ class QueueWorker:
                 llm_latency_ms=metrics.llm_latency_ms,
                 tts_latency_ms=metrics.tts_latency_ms,
             )
+
+        except ModerationRejectedError as e:
+            # MODERATION REJECTION: Consume points (fulfill), do NOT refund
+            logger.warning(
+                "queue_item_moderation_rejected",
+                item_id=item.id,
+                user=item.user,
+                reason=e.reason,
+                category=e.category,
+            )
+
+            # Log rejection to database
+            await self._log_narration(
+                item=item,
+                result=None,
+                status="moderation_rejected",
+                error_message=f"[{e.category}] {e.reason}",
+            )
+
+            # Broadcast moderation error to clients
+            await self._ws_manager.broadcast_narration_error(
+                narration_id=item.id,
+                error=f"Message blocked by moderation: {e.reason}",
+                code="moderation_rejected",
+            )
+
+            # FULFILL redemption (consume points without refund)
+            # This is intentional - user loses points for policy violation
+            if item.redemption_id and self._rewards:
+                try:
+                    await self._rewards.fulfill_redemption(item.redemption_id)
+                    logger.info(
+                        "moderation_redemption_consumed",
+                        redemption_id=item.redemption_id,
+                        reason="policy_violation",
+                    )
+                except Exception as fulfill_error:
+                    logger.warning(
+                        "moderation_redemption_fulfill_failed",
+                        redemption_id=item.redemption_id,
+                        error=str(fulfill_error),
+                    )
 
         except Exception as e:
             logger.error(

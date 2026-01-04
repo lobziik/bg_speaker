@@ -7,17 +7,60 @@ from dataclasses import dataclass
 import structlog
 
 from src.models.narration import LanguageCode, NarrationRequest, NarrationResult
-from src.providers.llm.base import LLMProvider
+from src.providers.llm.base import LLMProvider, LLMResponseParseError
 from src.providers.llm.prompts import build_system_prompt
 from src.providers.tts.base import TTSProvider
 
 logger = structlog.get_logger()
 
 
+class ModerationRejectedError(Exception):
+    """Raised when content moderation rejects a user message.
+
+    This exception signals that:
+    1. The message violates Twitch policy
+    2. Channel points should be consumed (NOT refunded)
+    3. The narration should be skipped entirely
+
+    Attributes:
+        message: The original user message that was rejected.
+        reason: Human-readable explanation of why it was rejected.
+        category: Category of violation (e.g., "hate_speech", "sexual_content").
+    """
+
+    def __init__(
+        self,
+        message: str,
+        reason: str,
+        category: str = "policy_violation",
+    ) -> None:
+        """Initialize the exception.
+
+        Args:
+            message: The original user message that was rejected.
+            reason: Human-readable explanation of why it was rejected.
+            category: Category of violation.
+        """
+        self.message = message
+        self.reason = reason
+        self.category = category
+        super().__init__(f"Moderation rejected: {reason}")
+
+
 @dataclass
 class PipelineMetrics:
-    """Metrics from a pipeline run."""
+    """Metrics from a pipeline run.
 
+    Attributes:
+        moderation_latency_ms: Time spent on content moderation check (0 if disabled).
+        llm_latency_ms: Time spent on LLM narration formatting.
+        tts_latency_ms: Time spent on TTS synthesis.
+        total_latency_ms: Total pipeline execution time.
+        text_length: Length of the voice text.
+        audio_size_bytes: Size of the audio data in bytes.
+    """
+
+    moderation_latency_ms: int
     llm_latency_ms: int
     tts_latency_ms: int
     total_latency_ms: int
@@ -60,6 +103,70 @@ class NarrationPipeline:
         """
         return self._tts
 
+    async def _check_moderation(
+        self,
+        user: str,
+        message: str,
+        request_id: str,
+    ) -> int:
+        """Check message for Twitch policy compliance.
+
+        Args:
+            user: Username who sent the message.
+            message: Original message to validate.
+            request_id: Request ID for logging.
+
+        Returns:
+            Moderation latency in milliseconds.
+
+        Raises:
+            ModerationRejectedError: If message violates Twitch policy.
+        """
+        logger.debug(
+            "pipeline_moderation_start",
+            request_id=request_id,
+            user=user,
+            message_length=len(message),
+        )
+
+        moderation_start = time.monotonic()
+
+        try:
+            result = await self._llm.moderate(user=user, message=message)
+        except LLMResponseParseError as e:
+            # FAIL FAST: If we can't parse moderation response, reject
+            logger.error(
+                "pipeline_moderation_parse_error",
+                request_id=request_id,
+                raw_response=e.raw_response,
+                error=e.parse_error,
+            )
+            raise ModerationRejectedError(
+                message=message,
+                reason="Moderation check failed - cannot verify content safety",
+                category="parse_error",
+            ) from e
+
+        moderation_latency_ms = int((time.monotonic() - moderation_start) * 1000)
+
+        logger.info(
+            "pipeline_moderation_complete",
+            request_id=request_id,
+            allowed=result.allowed,
+            reason=result.reason,
+            category=result.category,
+            latency_ms=moderation_latency_ms,
+        )
+
+        if not result.allowed:
+            raise ModerationRejectedError(
+                message=message,
+                reason=result.reason,
+                category=result.category,
+            )
+
+        return moderation_latency_ms
+
     async def process(
         self,
         request: NarrationRequest,
@@ -69,6 +176,7 @@ class NarrationPipeline:
         auto_translate: bool = False,
         bypass_llm: bool = False,
         voice_id: str | None = None,
+        enable_moderation: bool = True,
     ) -> tuple[NarrationResult, PipelineMetrics]:
         """Process a narration request through the pipeline.
 
@@ -79,15 +187,18 @@ class NarrationPipeline:
             auto_translate: Enable translation between languages.
             bypass_llm: If True, skip LLM formatting and use raw message.
             voice_id: Explicit TTS voice ID (overrides language-based selection).
+            enable_moderation: If True, validate message for Twitch compliance.
 
         Returns:
             Tuple of (NarrationResult, PipelineMetrics).
 
         Raises:
             LLMResponseParseError: If LLM returns invalid JSON.
+            ModerationRejectedError: If message violates Twitch policy.
         """
         request_id = str(uuid.uuid4())
         start_time = time.monotonic()
+        moderation_latency_ms = 0
 
         logger.info(
             "pipeline_start",
@@ -99,7 +210,16 @@ class NarrationPipeline:
             subtitle_lang=subtitle_lang.value,
             auto_translate=auto_translate,
             bypass_llm=bypass_llm,
+            enable_moderation=enable_moderation,
         )
+
+        # Step 0: Content moderation (if enabled)
+        if enable_moderation:
+            moderation_latency_ms = await self._check_moderation(
+                user=request.user,
+                message=request.message,
+                request_id=request_id,
+            )
 
         # Step 1: LLM formatting (or bypass)
         if bypass_llm:
@@ -199,6 +319,7 @@ class NarrationPipeline:
         )
 
         metrics = PipelineMetrics(
+            moderation_latency_ms=moderation_latency_ms,
             llm_latency_ms=llm_latency_ms,
             tts_latency_ms=tts_latency_ms,
             total_latency_ms=total_latency_ms,

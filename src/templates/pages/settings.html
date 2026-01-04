@@ -158,6 +158,17 @@
         </div>
 
         <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" name="enable_moderation" {% if narrator.enable_moderation %}checked{% endif %}>
+                Enable content moderation (Twitch policy compliance)
+            </label>
+            <small class="help-text">
+                When enabled, messages are checked for Twitch policy violations before narration.
+                Rejected messages will consume channel points without refund.
+            </small>
+        </div>
+
+        <div class="form-group">
             <label for="default_style">Default Style</label>
             <select name="default_style" id="default_style">
                 {% for style in narrator_styles %}

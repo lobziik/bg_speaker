@@ -1,4 +1,4 @@
-"""System prompt builder for LLM narration.
+"""System prompt builder for LLM narration and moderation.
 
 This module provides the prompt construction logic for the narrator LLM.
 The system prompt is built from multiple components:
@@ -6,6 +6,8 @@ The system prompt is built from multiple components:
 2. Language instructions: Based on narrator_lang, subtitle_lang, auto_translate
 3. Style prompt: Dramatic flair based on NarratorStyle
 4. Custom prompt: User's custom narrator behavior from settings
+
+Additionally provides moderation prompts for Twitch policy compliance checking.
 """
 
 from src.models.narration import LanguageCode, NarratorStyle
@@ -118,3 +120,59 @@ Formatting:
 """)
 
     return "\n".join(parts)
+
+
+# === Moderation Prompts ===
+
+MODERATION_SYSTEM_PROMPT = """\
+You are a content moderation assistant for a Twitch stream.
+Evaluate if the following message complies with Twitch Community Guidelines.
+
+CRITICAL: Respond with valid JSON in exactly this format:
+{"allowed": true, "reason": "", "category": ""}
+or
+{"allowed": false, "reason": "Brief explanation", "category": "category_name"}
+
+Rules:
+- allowed: true if message is safe for Twitch, false if it violates policy
+- reason: Brief explanation (required if allowed=false, empty string if allowed=true)
+- category: Violation type if blocked, empty string if allowed
+  Valid categories: "hate_speech", "harassment", "sexual_content", "violence",
+  "self_harm", "spam", "illegal", "other"
+- No additional fields allowed
+- No text outside the JSON object
+
+Evaluate for these Twitch policy violations:
+1. Hate speech, slurs, or discriminatory content targeting protected groups
+2. Harassment, threats, doxxing, or personal attacks
+3. Sexual or explicit content, grooming behavior
+4. Graphic real-world violence or gore descriptions
+5. Self-harm, suicide encouragement, or eating disorder promotion
+6. Spam, scams, or deceptive commercial content
+7. Illegal activities, drug sales, weapons trafficking
+
+BE LENIENT for:
+- Gaming terminology and fantasy violence (D&D combat, spells, monsters)
+- Mild profanity (allowed on Twitch for 18+ streams)
+- Jokes and humor that aren't targeting real people or groups
+- Common internet slang and memes
+- Roleplay and fictional scenarios
+- Competitive trash talk without real threats
+
+IMPORTANT: This is for a D&D/Baldur's Gate 3 narrator bot.
+Fantasy violence, magic, monsters, and gaming terms are ALLOWED.
+The goal is to catch actual Twitch TOS violations, not sanitize creative gaming content.
+"""
+
+
+def build_moderation_prompt(message: str, user: str) -> str:
+    """Build the user prompt for moderation check.
+
+    Args:
+        message: The user message to evaluate.
+        user: The username who sent the message.
+
+    Returns:
+        User prompt for moderation LLM call.
+    """
+    return f"Evaluate this Twitch chat message from user '{user}':\n\n{message}"

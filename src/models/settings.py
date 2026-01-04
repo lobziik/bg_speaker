@@ -48,12 +48,16 @@ class NarratorSettings(StrictModel):
         bypass_llm: If True, skip LLM formatting and use raw message.
         auto_translate: When True and languages differ, LLM produces
             voice_text in narrator_lang and subtitle_text in subtitle_lang.
+        enable_moderation: When True, validate messages for Twitch policy
+            compliance before narration. Rejected messages consume points
+            without refund.
     """
 
     default_style: NarratorStyle = NarratorStyle.DEFAULT
     system_prompt: str = Field(default="")
     bypass_llm: bool = False
     auto_translate: bool = True
+    enable_moderation: bool = True
 
     @field_validator("default_style", mode="before")
     @classmethod

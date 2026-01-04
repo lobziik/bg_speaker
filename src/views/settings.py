@@ -134,6 +134,7 @@ async def save_narrator_settings(
         system_prompt=str(form_data.get("system_prompt", "")),
         bypass_llm=form_data.get("bypass_llm") == "on",
         auto_translate=form_data.get("auto_translate") == "on",
+        enable_moderation=form_data.get("enable_moderation") == "on",
     )
 
     await settings_repo.set("narrator", settings)

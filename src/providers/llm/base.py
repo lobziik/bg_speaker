@@ -32,6 +32,20 @@ class LLMNarrationResponse(StrictModel):
     subtitle_text: str
 
 
+class ModerationResult(StrictModel):
+    """Result of content moderation check.
+
+    Attributes:
+        allowed: Whether the message passes moderation.
+        reason: Explanation for the decision (empty if allowed).
+        category: Violation category if not allowed (empty if allowed).
+    """
+
+    allowed: bool
+    reason: str = ""
+    category: str = ""
+
+
 class LLMResponseParseError(Exception):
     """Raised when LLM response cannot be parsed as expected JSON.
 
@@ -86,6 +100,7 @@ class LLMProvider(Protocol):
         message: str,
         system_prompt: str,
         style: str = "default",
+        model: str | None = None,
     ) -> LLMResponse:
         """Generate narrator text from user message.
 
@@ -94,12 +109,57 @@ class LLMProvider(Protocol):
             message: Original message.
             system_prompt: Complete system prompt including JSON format instructions.
             style: Narrator style template name.
+            model: Optional model ID override (defaults to provider's configured model).
 
         Returns:
             LLMResponse with voice_text and subtitle_text.
 
         Raises:
             LLMResponseParseError: If response is not valid JSON or missing fields.
+        """
+        ...
+
+    async def generate_raw(
+        self,
+        user: str,
+        message: str,
+        system_prompt: str,
+        model: str | None = None,
+    ) -> str:
+        """Generate raw LLM response without narration validation.
+
+        Used for moderation and other non-narration tasks where the response
+        format differs from the standard narration JSON schema.
+
+        Args:
+            user: Username for logging context.
+            message: The message to send to the LLM.
+            system_prompt: Complete system prompt.
+            model: Optional model ID override (defaults to provider's configured model).
+
+        Returns:
+            Raw response text from LLM.
+        """
+        ...
+
+    async def moderate(
+        self,
+        user: str,
+        message: str,
+        model: str | None = None,
+    ) -> ModerationResult:
+        """Check message for Twitch policy compliance.
+
+        Args:
+            user: Username who sent the message.
+            message: Message to validate.
+            model: Optional model ID override (defaults to provider's configured model).
+
+        Returns:
+            ModerationResult with allowed, reason, category.
+
+        Raises:
+            LLMResponseParseError: If response cannot be parsed as ModerationResult.
         """
         ...
 
