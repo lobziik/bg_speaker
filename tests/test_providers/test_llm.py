@@ -1,5 +1,6 @@
 """Tests for LLM providers."""
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -82,9 +83,10 @@ class TestGroqLLMProvider:
 
         assert schema["type"] == "object"
         assert "properties" in schema
-        assert "model" in schema["properties"]
-        assert "temperature" in schema["properties"]
-        assert "max_tokens" in schema["properties"]
+        properties = cast(dict[str, object], schema["properties"])
+        assert "model" in properties
+        assert "temperature" in properties
+        assert "max_tokens" in properties
 
     @pytest.mark.asyncio
     async def test_generate_success(

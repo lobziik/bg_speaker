@@ -36,7 +36,8 @@ uv run pytest tests/test_providers/test_llm.py
 uv run pytest --cov=src --cov-report=term-missing
 
 # Type checking
-uv run mypy src
+uv run mypy .
+uv run ty check .
 
 # Linting
 uv run ruff check .
@@ -136,8 +137,8 @@ On failure: logs warning and continues without Twitch (dashboard shows "disconne
 - No `Any` types - explicit types everywhere
 - mypy strict mode enforced in CI
 - ty (Ruff's type checker) additionally for stricter checks
-- Use `# ty: ignore[rule-name]` for ty-specific suppressions (doesn't trigger mypy unused-ignore)
 - No `# type: ignore` without explicit asking and extended comment explaining why
+- Use `# ty: ignore[rule-name]` for ty-specific suppressions (doesn't trigger mypy unused-ignore)
 
 ## Fail fast and LOUD
 Never do `except Exception:`. Always narrow down the exception type and handle it properly.

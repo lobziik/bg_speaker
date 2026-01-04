@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from typing import cast
 
 import pytest
 from starlette.websockets import WebSocketState
@@ -237,7 +238,8 @@ class TestWebSocketManagerQueueEvents:
         assert msg["type"] == "queue_update"
         assert msg["event"] == "item_added"
         assert msg["queue_length"] == 2
-        assert len(msg["items"]) == 2
+        msg_items = cast(list[object], msg["items"])
+        assert len(msg_items) == 2
 
 
 class TestWebSocketManagerClientMessages:

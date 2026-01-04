@@ -83,8 +83,8 @@ def worker(
     """Create a queue worker for testing."""
     return QueueWorker(
         queue=queue,
-        pipeline=mock_pipeline,  # type: ignore[arg-type]
-        ws_manager=mock_ws_manager,  # type: ignore[arg-type]
+        pipeline=mock_pipeline,
+        ws_manager=mock_ws_manager,
         rewards_controller=None,
     )
 
@@ -231,8 +231,8 @@ class TestWorkerProcessing:
 
         worker = QueueWorker(
             queue=queue,
-            pipeline=fast_pipeline,  # type: ignore[arg-type]
-            ws_manager=mock_ws_manager,  # type: ignore[arg-type]
+            pipeline=fast_pipeline,
+            ws_manager=mock_ws_manager,
             rewards_controller=None,
         )
 
@@ -267,8 +267,8 @@ class TestWorkerErrorHandling:
 
         worker = QueueWorker(
             queue=queue,
-            pipeline=error_pipeline,  # type: ignore[arg-type]
-            ws_manager=mock_ws_manager,  # type: ignore[arg-type]
+            pipeline=error_pipeline,
+            ws_manager=mock_ws_manager,
             rewards_controller=None,
         )
 
@@ -323,8 +323,8 @@ class TestWorkerErrorHandling:
 
         worker = QueueWorker(
             queue=queue,
-            pipeline=error_pipeline,  # type: ignore[arg-type]
-            ws_manager=mock_ws_manager,  # type: ignore[arg-type]
+            pipeline=error_pipeline,
+            ws_manager=mock_ws_manager,
             rewards_controller=None,
         )
 
@@ -378,8 +378,8 @@ class TestWorkerWithRewards:
 
         worker = QueueWorker(
             queue=queue,
-            pipeline=fast_pipeline,  # type: ignore[arg-type]
-            ws_manager=mock_ws_manager,  # type: ignore[arg-type]
+            pipeline=fast_pipeline,
+            ws_manager=mock_ws_manager,
             rewards_controller=mock_rewards,
         )
 
@@ -405,8 +405,8 @@ class TestWorkerWithRewards:
 
         worker = QueueWorker(
             queue=queue,
-            pipeline=error_pipeline,  # type: ignore[arg-type]
-            ws_manager=mock_ws_manager,  # type: ignore[arg-type]
+            pipeline=error_pipeline,
+            ws_manager=mock_ws_manager,
             rewards_controller=mock_rewards,
         )
 

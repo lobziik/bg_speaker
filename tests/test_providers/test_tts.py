@@ -1,6 +1,7 @@
 """Tests for TTS providers."""
 
 import asyncio
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -126,12 +127,14 @@ class TestPiperTTSProvider:
 
         assert schema["type"] == "object"
         assert "properties" in schema
-        assert "voice" in schema["properties"]
-        assert "length_scale" in schema["properties"]
-        assert "noise_scale" in schema["properties"]
+        properties = cast(dict[str, object], schema["properties"])
+        assert "voice" in properties
+        assert "length_scale" in properties
+        assert "noise_scale" in properties
 
         # Check voice enum contains expected voices
-        voice_enum = schema["properties"]["voice"]["enum"]
+        voice_props = cast(dict[str, object], properties["voice"])
+        voice_enum = cast(list[str], voice_props["enum"])
         assert "en_US-lessac-medium" in voice_enum
 
     @pytest.mark.asyncio
@@ -152,7 +155,8 @@ class TestPiperTTSProvider:
         async def mock_ensure_voice_loaded(_voice_id: str) -> MagicMock:
             return mock_voice
 
-        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[method-assign]
+        # Replace method with mock for testing (mypy doesn't like method assignment)
+        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[assignment]
 
         # Patch the piper module import that happens in _synthesize_sync
         with patch("piper.PiperVoice"), patch("piper.config.SynthesisConfig"):
@@ -179,7 +183,8 @@ class TestPiperTTSProvider:
         async def mock_ensure_voice_loaded(_voice_id: str) -> MagicMock:
             return mock_voice
 
-        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[method-assign]
+        # Replace method with mock for testing (mypy doesn't like method assignment)
+        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[assignment]
 
         settings = TTSSettings(speed=1.5)
 
@@ -210,7 +215,8 @@ class TestPiperTTSProvider:
         async def mock_ensure_voice_loaded(_voice_id: str) -> MagicMock:
             return mock_voice
 
-        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[method-assign]
+        # Replace method with mock for testing (mypy doesn't like method assignment)
+        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[assignment]
 
         with patch("piper.PiperVoice"), patch("piper.config.SynthesisConfig"):
             chunks = []
