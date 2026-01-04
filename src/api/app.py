@@ -105,6 +105,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         llm_provider = GroqLLMProvider(api_key=state.env.groq_api_key)
         tts_provider = PiperTTSProvider()
 
+        # Start TTS provider cleanup task and store reference for shutdown
+        await tts_provider.start()
+        state.tts_provider = tts_provider
+
         # Load and apply Piper TTS settings (speed, variation)
         piper_settings = await settings_repo.get(
             "piper", PiperSettings, PiperSettings()

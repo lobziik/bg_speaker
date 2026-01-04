@@ -63,8 +63,17 @@ Piper automatically selects the appropriate voice based on the configured `narra
 - `LANGUAGE_DEFAULT_VOICES` in `src/providers/tts/piper.py` maps each `LanguageCode` to a default voice
 - Users can override default voices per language via Settings → TTS Voice tab
 - Voice overrides stored in `TTSVoiceSettings.voice_overrides` (SQLite, key: `tts_voice`)
-- Voice models are lazy-loaded and cached per voice ID in `PiperTTSProvider._voices`
+- Voice models are lazy-loaded and cached with TTL-based cleanup (see below)
 - The `language` parameter flows: Worker → Pipeline → TTS `synthesize()`
+
+### Piper TTS Memory Management
+Voice models (~60-100MB each) are automatically unloaded after inactivity to reduce memory usage:
+- `TTLCache` in `src/core/ttl_cache.py` provides generic TTL-based caching with background cleanup
+- `PiperTTSProvider._voices` uses TTLCache to manage voice model lifecycle
+- Default TTL: 30 minutes (`PiperTTSProvider.DEFAULT_VOICE_TTL_SECONDS`)
+- Cleanup interval: 1 minute (`PiperTTSProvider.DEFAULT_CLEANUP_INTERVAL_SECONDS`)
+- Provider lifecycle: `start()` begins cleanup task, `close()` stops and clears cache
+- AppState tracks `tts_provider` and calls `close()` on shutdown
 
 ### Service Layer (`src/services/`)
 - `twitch/init_services.py`: Initializes EventSub + RewardController (at startup or after OAuth)

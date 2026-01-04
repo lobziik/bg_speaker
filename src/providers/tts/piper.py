@@ -10,6 +10,7 @@ from urllib.request import urlopen
 
 import structlog
 
+from src.core.ttl_cache import TTLCache
 from src.core.types import StrictModel
 from src.models.narration import LanguageCode
 from src.providers.tts.base import TTSProvider, TTSSettings, Voice
@@ -270,25 +271,48 @@ class PiperTTSProvider:
     - 30+ languages, 100+ voices
     - No voice cloning (uses pre-trained voices)
     - Dynamic voice selection based on language
+    - TTL-based automatic voice model cleanup after inactivity
 
     Voices: https://rhasspy.github.io/piper-samples/
     """
+
+    # Default voice model TTL: 30 minutes
+    DEFAULT_VOICE_TTL_SECONDS: float = 1800.0
+    # Cleanup check interval: 1 minute
+    DEFAULT_CLEANUP_INTERVAL_SECONDS: float = 60.0
 
     def __init__(
         self,
         settings: PiperSettings | None = None,
         voice_overrides: dict[LanguageCode, str] | None = None,
+        voice_ttl_seconds: float | None = None,
+        cleanup_interval_seconds: float | None = None,
     ) -> None:
         """Initialize Piper TTS provider.
 
         Args:
             settings: Piper-specific settings (used as fallback for non-language calls)
             voice_overrides: Per-language voice overrides from user settings
+            voice_ttl_seconds: TTL for cached voice models in seconds.
+                Models not used within this time will be unloaded.
+                Defaults to 30 minutes.
+            cleanup_interval_seconds: How often to check for expired voice models.
+                Defaults to 1 minute.
         """
         self._settings = settings or PiperSettings()
         self._voice_overrides = voice_overrides or {}
-        self._voices: dict[str, object] = {}  # voice_id -> PiperVoice, lazy loaded
+        self._voice_ttl = voice_ttl_seconds or self.DEFAULT_VOICE_TTL_SECONDS
+        self._cleanup_interval = cleanup_interval_seconds or self.DEFAULT_CLEANUP_INTERVAL_SECONDS
+
+        # TTL cache for voice models with cleanup callback
+        self._voices: TTLCache[object] = TTLCache(
+            ttl_seconds=self._voice_ttl,
+            cleanup_interval_seconds=self._cleanup_interval,
+            on_evict=self._on_voice_evicted,
+            name="piper_voices",
+        )
         self._lock = asyncio.Lock()
+        self._started = False
 
     @property
     def name(self) -> str:
@@ -304,6 +328,59 @@ class PiperTTSProvider:
     def supports_cloning(self) -> bool:
         """Piper doesn't support voice cloning."""
         return False
+
+    def _on_voice_evicted(self, voice_id: str, _voice: object) -> None:
+        """Callback when voice model is evicted from cache.
+
+        Called by TTLCache when a voice model expires due to inactivity.
+
+        Args:
+            voice_id: The voice ID being evicted (e.g., "en_US-lessac-medium").
+            _voice: The PiperVoice instance being unloaded (unused, kept for callback signature).
+        """
+        logger.info(
+            "piper_voice_unloaded",
+            voice=voice_id,
+            reason="ttl_expired",
+        )
+        # Note: PiperVoice doesn't have explicit close() method.
+        # Python GC will handle onnxruntime session cleanup when dereferenced.
+
+    async def start(self) -> None:
+        """Start the background cleanup task for voice model recycling.
+
+        Should be called after provider creation, before first use.
+        Safe to call multiple times.
+        """
+        if self._started:
+            logger.debug("piper_provider_already_started")
+            return
+
+        await self._voices.start()
+        self._started = True
+        logger.info(
+            "piper_provider_started",
+            voice_ttl_seconds=self._voice_ttl,
+            cleanup_interval_seconds=self._cleanup_interval,
+        )
+
+    async def close(self) -> None:
+        """Stop cleanup task and unload all cached voice models.
+
+        Should be called on application shutdown to free memory.
+        Safe to call multiple times.
+        """
+        if not self._started:
+            logger.debug("piper_provider_already_stopped")
+            return
+
+        await self._voices.stop()
+        cleared_count = await self._voices.clear()
+        self._started = False
+        logger.info(
+            "piper_provider_closed",
+            voices_unloaded=cleared_count,
+        )
 
     def update_settings(
         self,
@@ -378,21 +455,31 @@ class PiperTTSProvider:
     async def _ensure_voice_loaded(self, voice_id: str) -> object:
         """Ensure a specific voice model is loaded, loading if necessary.
 
+        Uses TTLCache for automatic cleanup of unused voice models.
+        Double-checked locking pattern for thread safety.
+
         Args:
             voice_id: Voice ID to load (e.g., "en_US-lessac-medium")
 
         Returns:
             PiperVoice instance
         """
-        if voice_id not in self._voices:
-            async with self._lock:
-                # Double-check after acquiring lock
-                if voice_id not in self._voices:
-                    loop = asyncio.get_event_loop()
-                    self._voices[voice_id] = await loop.run_in_executor(
-                        None, self._load_voice, voice_id
-                    )
-        return self._voices[voice_id]
+        # Check cache first (also updates access time for TTL)
+        voice = await self._voices.get(voice_id)
+        if voice is not None:
+            return voice
+
+        async with self._lock:
+            # Double-check after acquiring lock
+            voice = await self._voices.get(voice_id)
+            if voice is not None:
+                return voice
+
+            # Load voice in executor (blocking I/O)
+            loop = asyncio.get_event_loop()
+            voice = await loop.run_in_executor(None, self._load_voice, voice_id)
+            await self._voices.set(voice_id, voice)
+            return voice
 
     async def _ensure_loaded(self) -> object:
         """Lazy load default voice model (backward compatibility).

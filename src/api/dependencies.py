@@ -22,6 +22,7 @@ from src.services.twitch.auth import TwitchAuthService
 TEMPLATES_PATH = Path(__file__).parent.parent / "templates"
 
 if TYPE_CHECKING:
+    from src.providers.tts.piper import PiperTTSProvider
     from src.services.global_cooldown import GlobalCooldownManager
     from src.services.pipeline import NarrationPipeline
     from src.services.twitch.eventsub import TwitchEventSubService
@@ -47,6 +48,7 @@ class AppState:
     twitch_eventsub: TwitchEventSubService | None = None
     twitch_rewards: TwitchRewardController | None = None
     global_cooldown: GlobalCooldownManager | None = None
+    tts_provider: PiperTTSProvider | None = None
     _initialized: bool = field(default=False, repr=False)
 
     async def initialize(self) -> None:
@@ -66,6 +68,8 @@ class AppState:
             await self.twitch_eventsub.stop()
         if self.twitch_rewards:
             await self.twitch_rewards.close()
+        if self.tts_provider:
+            await self.tts_provider.close()
         await self.twitch_auth.close()
         await self.queue.shutdown()
         await self.db.close()

@@ -1,5 +1,6 @@
 """Tests for TTS providers."""
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -414,3 +415,145 @@ class TestPiperLanguageVoiceSelection:
 
         assert "custom-voice" in loaded_voice_ids
         assert "ru_RU-ruslan-medium" not in loaded_voice_ids
+
+
+class TestPiperTTSProviderLifecycle:
+    """Tests for Piper TTS provider lifecycle management."""
+
+    def test_init_creates_ttl_cache(self) -> None:
+        """Provider should initialize with TTL cache for voices."""
+        provider = PiperTTSProvider()
+
+        assert provider._voices is not None
+        assert provider._started is False
+
+    def test_init_with_custom_ttl(self) -> None:
+        """Provider should accept custom TTL value."""
+        provider = PiperTTSProvider(voice_ttl_seconds=7200.0)
+
+        assert provider._voice_ttl == 7200.0
+        assert provider._voices.ttl_seconds == 7200.0
+
+    def test_init_default_ttl(self) -> None:
+        """Provider should use 30-minute default TTL."""
+        provider = PiperTTSProvider()
+
+        assert provider._voice_ttl == 1800.0  # 30 minutes
+
+    @pytest.mark.asyncio
+    async def test_start_sets_started_flag(self) -> None:
+        """start() should set _started flag."""
+        provider = PiperTTSProvider()
+        assert provider._started is False
+
+        await provider.start()
+        try:
+            assert provider._started is True
+        finally:
+            await provider.close()
+
+    @pytest.mark.asyncio
+    async def test_start_starts_cleanup_task(self) -> None:
+        """start() should start the TTL cache cleanup task."""
+        provider = PiperTTSProvider()
+
+        await provider.start()
+        try:
+            assert provider._voices._cleanup_task is not None
+            assert not provider._voices._cleanup_task.done()
+        finally:
+            await provider.close()
+
+    @pytest.mark.asyncio
+    async def test_close_stops_cleanup_and_clears_cache(self) -> None:
+        """close() should stop cleanup and clear voice cache."""
+        provider = PiperTTSProvider()
+        await provider.start()
+
+        # Add a mock voice to the cache
+        await provider._voices.set("test-voice", MagicMock())
+        assert provider._voices.size() == 1
+
+        await provider.close()
+
+        assert provider._started is False
+        assert provider._voices.size() == 0
+        assert provider._voices._cleanup_task is None
+
+    @pytest.mark.asyncio
+    async def test_double_start_is_safe(self) -> None:
+        """Calling start() twice should be safe."""
+        provider = PiperTTSProvider()
+
+        await provider.start()
+        try:
+            await provider.start()  # Should not raise
+            assert provider._started is True
+        finally:
+            await provider.close()
+
+    @pytest.mark.asyncio
+    async def test_double_close_is_safe(self) -> None:
+        """Calling close() twice should be safe."""
+        provider = PiperTTSProvider()
+
+        await provider.start()
+        await provider.close()
+        await provider.close()  # Should not raise
+
+        assert provider._started is False
+
+    @pytest.mark.asyncio
+    async def test_close_without_start_is_safe(self) -> None:
+        """Calling close() without start() should be safe."""
+        provider = PiperTTSProvider()
+
+        await provider.close()  # Should not raise
+        assert provider._started is False
+
+    @pytest.mark.asyncio
+    async def test_voice_eviction_callback_called(self) -> None:
+        """Eviction callback should be called when voice expires."""
+        provider = PiperTTSProvider(
+            voice_ttl_seconds=0.1,
+            cleanup_interval_seconds=0.05,  # Fast cleanup for testing
+        )
+        await provider.start()
+
+        try:
+            # Add a mock voice
+            mock_voice = MagicMock()
+            await provider._voices.set("test-voice", mock_voice)
+
+            # Wait for TTL expiry and cleanup
+            await asyncio.sleep(0.2)
+
+            # Voice should be evicted
+            assert provider._voices.size() == 0
+        finally:
+            await provider.close()
+
+    @pytest.mark.asyncio
+    async def test_voice_access_resets_ttl(self) -> None:
+        """Accessing a voice should reset its TTL."""
+        provider = PiperTTSProvider(
+            voice_ttl_seconds=0.15,
+            cleanup_interval_seconds=0.05,  # Fast cleanup for testing
+        )
+        await provider.start()
+
+        try:
+            # Add a mock voice
+            await provider._voices.set("test-voice", MagicMock())
+
+            # Access before TTL expires to reset
+            await asyncio.sleep(0.1)
+            result = await provider._voices.get("test-voice")
+            assert result is not None
+
+            # Wait a bit more - should still exist due to TTL reset
+            await asyncio.sleep(0.1)
+            result = await provider._voices.get("test-voice")
+            assert result is not None
+        finally:
+            await provider.close()
