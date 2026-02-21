@@ -29,6 +29,13 @@ dependencies = [
     "structlog>=24.0.0",
     "tenacity>=9.0.0",
     "pyyaml>=6.0",
+    "f5-tts>=1.1.16",
+    "gradio>=6.6.0",
+    "ruaccent>=1.5.8.3",
+    "transformers>=5.2.0",
+    "torch>=2.10.0",
+    "torchaudio>=2.10.0",
+    "huggingface-hub>=1.4.1",
 ]
 
 [project.optional-dependencies]
