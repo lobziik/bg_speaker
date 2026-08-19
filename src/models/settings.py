@@ -156,6 +156,20 @@ class GeminiSafetyThreshold(StrEnum):
     BLOCK_NONE = "BLOCK_NONE"
 
 
+class GeminiThinkingLevel(StrEnum):
+    """How much reasoning a Gemini model should spend before answering.
+
+    Mirrors ``google.genai.types.ThinkingLevel``. This is the control current
+    models expose; ``thinking_budget`` is the older numeric equivalent and some
+    models reject it outright.
+    """
+
+    MINIMAL = "MINIMAL"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
 class ProviderSettings(StrictModel):
     """Which provider implementation is active for each pipeline stage.
 
@@ -209,17 +223,30 @@ class GeminiLLMSettings(StrictModel):
         model: Gemini model ID.
         temperature: Sampling temperature.
         max_output_tokens: Response length cap.
-        thinking_budget: Thinking token budget. 0 disables thinking for the
-            lowest latency (3.6 Flash / Flash-Lite only), -1 lets the model
-            decide, None uses the model default.
+        thinking_level: How much reasoning to spend. MINIMAL keeps narration
+            latency down and is what current models accept.
+        thinking_budget: Older numeric equivalent of the level, in tokens. -1
+            lets the model decide. Mutually exclusive with thinking_level, and
+            a model may reject it - notably a budget of 0.
         safety_threshold: Gemini safety filter strictness.
     """
 
     model: str = "gemini-3.6-flash"
     temperature: float = Field(default=0.8, ge=0, le=2)
     max_output_tokens: int = Field(default=500, ge=50, le=2000)
-    thinking_budget: int | None = Field(default=0, ge=-1, le=24576)
+    thinking_level: GeminiThinkingLevel | None = GeminiThinkingLevel.MINIMAL
+    thinking_budget: int | None = Field(default=None, ge=-1, le=24576)
     safety_threshold: GeminiSafetyThreshold = GeminiSafetyThreshold.BLOCK_ONLY_HIGH
+
+    @field_validator("thinking_level", mode="before")
+    @classmethod
+    def convert_string_to_thinking_level(
+        cls, value: str | GeminiThinkingLevel | None
+    ) -> GeminiThinkingLevel | None:
+        """Convert string to GeminiThinkingLevel for JSON deserialization."""
+        if isinstance(value, str):
+            return GeminiThinkingLevel(value)
+        return value
 
     @field_validator("safety_threshold", mode="before")
     @classmethod

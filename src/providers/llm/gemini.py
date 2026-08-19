@@ -29,9 +29,26 @@ logger = structlog.get_logger()
 # throwaway provider instance for each render.
 MODEL_CATALOGUE: ApiCatalogue[Model] = ApiCatalogue("gemini_models")
 
-# Only models that can answer a generateContent call are narration candidates;
-# the same listing carries embedding and image models.
+# Only models that can answer a generateContent call are narration candidates.
 NARRATION_ACTION = "generateContent"
+
+# generateContent is not enough on its own: speech, image, music, robotics and
+# agent models all advertise it. These substrings mark the ones that cannot
+# return narration text, so offering them would only produce a runtime failure.
+NON_NARRATION_MARKERS = (
+    "tts",
+    "image",
+    "banana",
+    "lyria",
+    "veo",
+    "imagen",
+    "embedding",
+    "robotics",
+    "computer-use",
+    "deep-research",
+    "antigravity",
+    "aqa",
+)
 
 
 # Response schema for narration calls. Declared explicitly rather than derived
@@ -91,38 +108,21 @@ class GeminiLLMProvider:
     Recommended model: gemini-3.6-flash
     """
 
+    # Fallback only: list_models() asks the API, and this is what the settings
+    # form falls back to when that call fails. Kept short and current on
+    # purpose - a long hardcoded catalogue rots, and an older one here listed
+    # models the API now answers 404 for.
     AVAILABLE_MODELS: ClassVar[list[Model]] = [
+        Model(id="gemini-3.6-flash", name="Gemini 3.6 Flash", context_length=1_048_576),
+        Model(id="gemini-3.7-flash", name="Gemini 3.7 Flash", context_length=1_048_576),
+        Model(id="gemini-3.5-flash", name="Gemini 3.5 Flash", context_length=1_048_576),
         Model(
-            id="gemini-3.6-flash",
-            name="Gemini 3.6 Flash",
+            id="gemini-3.5-flash-lite",
+            name="Gemini 3.5 Flash Lite",
             context_length=1_048_576,
         ),
-        Model(
-            id="gemini-2.5-flash",
-            name="Gemini 2.5 Flash",
-            context_length=1_048_576,
-        ),
-        Model(
-            id="gemini-2.5-flash-lite",
-            name="Gemini 2.5 Flash Lite",
-            context_length=1_048_576,
-        ),
-        Model(
-            id="gemini-2.5-pro",
-            name="Gemini 2.5 Pro",
-            context_length=1_048_576,
-        ),
-        Model(
-            id="gemini-2.0-flash",
-            name="Gemini 2.0 Flash",
-            context_length=1_048_576,
-        ),
+        Model(id="gemini-flash-latest", name="Gemini Flash Latest", context_length=1_048_576),
     ]
-
-    # Models that reject thinking_budget=0 - Pro always reasons, and the 2.0
-    # generation has no thinking config at all.
-    MODELS_REQUIRING_THINKING: ClassVar[frozenset[str]] = frozenset({"gemini-2.5-pro"})
-    MODELS_WITHOUT_THINKING: ClassVar[frozenset[str]] = frozenset({"gemini-2.0-flash"})
 
     def __init__(
         self,
@@ -130,7 +130,8 @@ class GeminiLLMProvider:
         model: str = "gemini-3.6-flash",
         temperature: float = 0.8,
         max_output_tokens: int = 500,
-        thinking_budget: int | None = 0,
+        thinking_level: str | None = "MINIMAL",
+        thinking_budget: int | None = None,
         safety_threshold: str = "BLOCK_ONLY_HIGH",
     ) -> None:
         """Initialize the Gemini provider.
@@ -140,9 +141,11 @@ class GeminiLLMProvider:
             model: Model ID to use (see AVAILABLE_MODELS).
             temperature: Sampling temperature (0-2).
             max_output_tokens: Maximum tokens to generate per response.
-            thinking_budget: Thinking token budget. 0 disables thinking for the
-                lowest latency, -1 lets the model decide, None omits the setting
-                entirely and uses the model default.
+            thinking_level: How much reasoning to spend before answering.
+                MINIMAL keeps narration latency down. None omits the setting.
+            thinking_budget: Older numeric form of the same control. -1 lets the
+                model decide. Mutually exclusive with thinking_level; current
+                models reject a budget of 0.
             safety_threshold: Gemini safety filter threshold applied to the
                 harassment / hate / sexual / dangerous categories. Defaults to
                 BLOCK_ONLY_HIGH so fantasy violence passes while high-severity
@@ -150,19 +153,48 @@ class GeminiLLMProvider:
                 Twitch-policy gate.
 
         Raises:
-            ValueError: If thinking_budget is incompatible with the model, or
-                safety_threshold is not a valid HarmBlockThreshold value.
+            ValueError: If both thinking controls are set, if the level is not a
+                valid ThinkingLevel, or if safety_threshold is not a valid
+                HarmBlockThreshold value.
         """
+        if thinking_level is not None and thinking_budget is not None:
+            raise ValueError(
+                "Set either thinking_level or thinking_budget, not both - they are "
+                "two spellings of the same control and the API rejects the pair."
+            )
+
         self._api_key = api_key
         self._model = model
         self._temperature = temperature
         self._max_output_tokens = max_output_tokens
         self._thinking_budget = thinking_budget
+        self._thinking_level = (
+            self._parse_thinking_level(thinking_level) if thinking_level is not None else None
+        )
         self._safety_threshold = self._parse_safety_threshold(safety_threshold)
 
-        self._validate_thinking_budget(model, thinking_budget)
-
         self._client = genai.Client(api_key=api_key.get_secret_value())
+
+    @staticmethod
+    def _parse_thinking_level(level: str) -> genai_types.ThinkingLevel:
+        """Convert a level name into the SDK enum.
+
+        Membership is checked explicitly for the same reason as the safety
+        threshold: the SDK's enums accept unknown values with only a warning.
+
+        Args:
+            level: Level name (e.g. "MINIMAL").
+
+        Returns:
+            The matching ThinkingLevel enum member.
+
+        Raises:
+            ValueError: If the name is not a valid level.
+        """
+        by_value = {member.value: member for member in genai_types.ThinkingLevel}
+        if level not in by_value:
+            raise ValueError(f"Invalid thinking_level '{level}'. Valid values: {sorted(by_value)}")
+        return by_value[level]
 
     @staticmethod
     def _parse_safety_threshold(threshold: str) -> genai_types.HarmBlockThreshold:
@@ -188,35 +220,6 @@ class GeminiLLMProvider:
             )
         return by_value[threshold]
 
-    @classmethod
-    def _validate_thinking_budget(cls, model: str, thinking_budget: int | None) -> None:
-        """Reject thinking budgets the selected model cannot honour.
-
-        Failing here surfaces the misconfiguration at startup instead of as a
-        400 on the first redemption.
-
-        Args:
-            model: Model ID that will be used.
-            thinking_budget: Requested thinking budget (None = model default).
-
-        Raises:
-            ValueError: If the budget is incompatible with the model.
-        """
-        if thinking_budget is None:
-            return
-
-        if model in cls.MODELS_WITHOUT_THINKING:
-            raise ValueError(
-                f"Model '{model}' does not support a thinking budget. "
-                f"Set thinking_budget to None for this model."
-            )
-
-        if model in cls.MODELS_REQUIRING_THINKING and thinking_budget == 0:
-            raise ValueError(
-                f"Model '{model}' cannot disable thinking. Use a positive budget "
-                f"(e.g. 128), -1 for dynamic thinking, or None for the model default."
-            )
-
     @property
     def name(self) -> str:
         """Provider display name."""
@@ -237,7 +240,9 @@ class GeminiLLMProvider:
             GenerateContentConfig for a generate_content call.
         """
         thinking_config: genai_types.ThinkingConfig | None = None
-        if self._thinking_budget is not None:
+        if self._thinking_level is not None:
+            thinking_config = genai_types.ThinkingConfig(thinking_level=self._thinking_level)
+        elif self._thinking_budget is not None:
             thinking_config = genai_types.ThinkingConfig(thinking_budget=self._thinking_budget)
 
         return genai_types.GenerateContentConfig(
@@ -334,6 +339,9 @@ class GeminiLLMProvider:
                 config=self._build_config(system_prompt, response_schema),
             )
         except genai_errors.ClientError as e:
+            # A 400 here is almost always the model refusing an argument rather
+            # than anything about the message, and the API does not say which -
+            # so the tunable ones go into the log.
             logger.error(
                 "gemini_client_error",
                 user=user,
@@ -341,6 +349,9 @@ class GeminiLLMProvider:
                 model=effective_model,
                 code=e.code,
                 error=e.message,
+                thinking_level=self._thinking_level,
+                thinking_budget=self._thinking_budget,
+                safety_threshold=self._safety_threshold,
             )
             raise
         except genai_errors.ServerError as e:
@@ -561,6 +572,19 @@ class GeminiLLMProvider:
 
         return result
 
+    @staticmethod
+    def _is_narration_model(model_id: str) -> bool:
+        """Whether a listed model can return narration text.
+
+        Args:
+            model_id: Model ID as returned by the API.
+
+        Returns:
+            False for speech, image, music and agent models.
+        """
+        lowered = model_id.lower()
+        return not any(marker in lowered for marker in NON_NARRATION_MARKERS)
+
     async def _fetch_models(self) -> list[Model]:
         """Ask the API which models this key can use for narration.
 
@@ -581,6 +605,8 @@ class GeminiLLMProvider:
             if NARRATION_ACTION not in actions or entry.name is None:
                 continue
             model_id = entry.name.removeprefix("models/")
+            if not self._is_narration_model(model_id):
+                continue
             models.append(
                 Model(
                     id=model_id,
@@ -645,14 +671,25 @@ class GeminiLLMProvider:
                     "minimum": 50,
                     "maximum": 2000,
                 },
+                "thinking_level": {
+                    "type": ["string", "null"],
+                    "title": "Thinking Level",
+                    "description": (
+                        "How much reasoning to spend before answering. MINIMAL keeps "
+                        "narration latency down. Leave empty to use the model default"
+                    ),
+                    "default": "MINIMAL",
+                    "enum": [level.value for level in genai_types.ThinkingLevel],
+                },
                 "thinking_budget": {
                     "type": ["integer", "null"],
                     "title": "Thinking Budget",
                     "description": (
-                        "0 disables thinking (lowest latency, Flash models only), "
-                        "-1 lets the model decide, null uses the model default"
+                        "Older numeric form of the thinking level, in tokens; -1 lets the "
+                        "model decide. Only used when the level is empty, and current "
+                        "models reject a budget of 0"
                     ),
-                    "default": 0,
+                    "default": None,
                     "minimum": -1,
                     "maximum": 24576,
                 },

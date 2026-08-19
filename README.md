@@ -132,10 +132,10 @@ Gemini specifics:
 
 - **Structured output**: narration and moderation both use response schemas, so
   the JSON contract is enforced by the API rather than by prompting.
-- **Thinking budget**: defaults to `0` for the lowest latency. 2.5 Pro cannot
-  disable thinking and 2.0 Flash has no thinking config at all - the provider
-  refuses those combinations at construction time instead of failing on the
-  first redemption.
+- **Thinking level**: defaults to `MINIMAL`, which keeps narration latency down.
+  The older numeric `thinking_budget` is still available for models that want
+  it, but only when no level is set - the two are mutually exclusive. Current
+  models reject a budget of `0` outright.
 - **Safety threshold**: defaults to `BLOCK_ONLY_HIGH` so ordinary fantasy combat
   description is not rejected by Google's filter; the bot's own moderation step
   remains the Twitch-policy gate. A message the provider does block is treated

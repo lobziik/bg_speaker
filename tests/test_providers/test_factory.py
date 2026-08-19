@@ -115,13 +115,13 @@ class TestBuildLLMProvider:
             )
 
     def test_invalid_gemini_settings_propagate(self) -> None:
-        """A model/budget mismatch surfaces as ValueError, not a broken provider."""
-        with pytest.raises(ValueError, match="cannot disable thinking"):
+        """A refused combination surfaces as ValueError, not a broken provider."""
+        with pytest.raises(ValueError, match="not both"):
             build_llm_provider(
                 env=_env(gemini="AIza_test"),
                 provider=LLMProviderName.GEMINI,
                 groq_settings=GroqLLMSettings(),
-                gemini_settings=GeminiLLMSettings(model="gemini-2.5-pro", thinking_budget=0),
+                gemini_settings=GeminiLLMSettings(thinking_budget=0),
             )
 
 
@@ -231,12 +231,13 @@ class TestDefaultsMatchCatalogues:
 
         assert PiperSettings().voice in catalogue
 
-    def test_gemini_default_model_accepts_the_default_thinking_budget(self) -> None:
+    def test_gemini_defaults_build_a_provider(self) -> None:
         """The shipped defaults must build a provider without arguing."""
         settings = GeminiLLMSettings()
 
         GeminiLLMProvider(
             api_key=SecretStr("test"),
             model=settings.model,
+            thinking_level=(settings.thinking_level.value if settings.thinking_level else None),
             thinking_budget=settings.thinking_budget,
         )
