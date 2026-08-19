@@ -187,3 +187,49 @@ class TestDefaultProviderSettings:
         defaults = default_provider_settings(_env())
 
         assert defaults.llm is LLMProviderName.GROQ
+
+
+class TestDefaultsMatchCatalogues:
+    """A default the provider does not offer cannot be shown or selected."""
+
+    @pytest.mark.asyncio
+    async def test_gemini_llm_default_model_is_offered(self) -> None:
+        """The settings default must appear in the model dropdown."""
+        provider = GeminiLLMProvider(api_key=SecretStr("test"))
+        catalogue = {model.id for model in await provider.list_models()}
+
+        assert GeminiLLMSettings().model in catalogue
+
+    @pytest.mark.asyncio
+    async def test_groq_default_model_is_offered(self) -> None:
+        """Same for Groq: the form renders options from list_models()."""
+        provider = GroqLLMProvider(api_key=SecretStr("test"))
+        catalogue = {model.id for model in await provider.list_models()}
+
+        assert GroqLLMSettings().model in catalogue
+
+    @pytest.mark.asyncio
+    async def test_gemini_tts_default_voice_is_offered(self) -> None:
+        """The default voice must be one the provider actually has."""
+        provider = GeminiTTSProvider(api_key=SecretStr("test"))
+        catalogue = {voice.id for voice in await provider.list_voices()}
+
+        assert GeminiTTSSettings().voice_name in catalogue
+
+    @pytest.mark.asyncio
+    async def test_piper_default_voice_is_offered(self) -> None:
+        """Piper's fallback voice must be in its catalogue too."""
+        provider = PiperTTSProvider()
+        catalogue = {voice.id for voice in await provider.list_voices()}
+
+        assert PiperSettings().voice in catalogue
+
+    def test_gemini_default_model_accepts_the_default_thinking_budget(self) -> None:
+        """The shipped defaults must build a provider without arguing."""
+        settings = GeminiLLMSettings()
+
+        GeminiLLMProvider(
+            api_key=SecretStr("test"),
+            model=settings.model,
+            thinking_budget=settings.thinking_budget,
+        )
