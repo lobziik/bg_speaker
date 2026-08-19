@@ -1,0 +1,138 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "1"
+
+jobs:
+  lint_typecheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6 at 6.4.2026
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      # Both type checkers run: mypy in strict mode, and ty for the stricter
+      # checks it catches that mypy accepts.
+      - name: mypy
+        run: uv run mypy .
+
+      - name: ty
+        run: uv run ty check .
+
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6 at 6.4.2026
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run tests with coverage
+        run: uv run pytest --cov=src --cov-report=term-missing --cov-report=xml
+
+      - name: Coverage summary
+        if: always()
+        run: uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+
+  shell:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6 at 6.4.2026
+
+      # The deployment CLI is a release artifact and the init script decides
+      # whether the container boots at all, so both are linted like source.
+      - name: ShellCheck
+        run: shellcheck -S warning narrator container/scripts/*.sh
+
+  build_verify:
+    # The image is the deliverable, so it is built on every push to main and on
+    # demand for a pull request - add the "build-verify" label to opt in.
+    if: >-
+      github.event_name == 'push'
+      || contains(github.event.pull_request.labels.*.name, 'build-verify')
+    # Both architectures on native runners: arm64 is what the OCI Ampere target
+    # actually runs, and it is where a missing wheel would show up first.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6 at 6.4.2026
+
+      - name: Build image
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2 at 6.4.2026
+        with:
+          image: narrator
+          tags: ci
+          containerfiles: container/Dockerfile
+          archs: ${{ matrix.arch }}
+
+      - name: Ensure podman is available
+        run: command -v podman || (sudo apt-get update && sudo apt-get install -y podman)
+
+      # Boot the image the way `narrator start` does and wait for the app to
+      # answer through Caddy. A ".localhost" domain makes Caddy use its internal
+      # CA instead of reaching for Let's Encrypt.
+      - name: Smoke test the image
+        run: |
+          set -euo pipefail
+
+          podman run -d --name narrator-ci --systemd always \
+            -e DOMAIN=narrator.localhost \
+            -e LETSENCRYPT_EMAIL=ci@example.com \
+            -e SECRET_KEY=ci-secret-key \
+            -e ADMIN_USERNAME=ci -e ADMIN_PASSWORD=ci \
+            -e GEMINI_API_KEY=fake-key-for-boot-test \
+            localhost/narrator:ci
+
+          trap 'podman logs narrator-ci || true; podman rm -f narrator-ci || true' EXIT
+
+          for _ in $(seq 1 30); do
+            if podman exec narrator-ci curl -sfk https://narrator.localhost/health; then
+              echo
+              podman exec narrator-ci systemctl is-active \
+                narrator-init narrator-app narrator-caddy
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "The container did not become healthy within 60s"
+          podman exec narrator-ci systemctl --no-pager --failed || true
+          exit 1
