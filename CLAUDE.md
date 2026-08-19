@@ -287,6 +287,13 @@ Two container builds exist, deliberately:
   missing variable), `narrator-app` (uvicorn on 127.0.0.1:8000 as the `narrator` user) and
   `narrator-caddy` (TLS termination, automatic Let's Encrypt).
 
+Oracle Cloud filters inbound traffic twice, and both layers must allow 80 and 443: the VCN
+security list (or NSG) in the console, and the instance's own iptables, whose stock ruleset ends
+in a blanket REJECT. `./narrator install` offers to open the host side - a rule appended after
+that REJECT never matches, so it is inserted above it - but the VCN side can only be done in the
+console. A blocked port 80 shows up as Let's Encrypt reporting
+`Timeout during connect (likely firewall problem)`.
+
 Gotchas that are easy to reintroduce:
 
 - systemd does not inherit the container environment. Every variable `narrator-init.sh` reads must

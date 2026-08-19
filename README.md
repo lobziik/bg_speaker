@@ -209,8 +209,10 @@ Requirements:
 
 - A DNS A record pointing at the VM - Caddy issues a Let's Encrypt certificate
   automatically on first start.
-- TCP 80 and 443 reachable. On Oracle Cloud, open them in **both** the host
-  firewall and the VCN security list.
+- TCP 80 and 443 reachable. On Oracle Cloud that means **both** layers: the VCN
+  security list (or NSG) in the console, and the instance's own iptables. The
+  installer offers to open the host side; the VCN side is console-only. If port
+  80 is blocked, Let's Encrypt reports `Timeout during connect`.
 - Set the Twitch OAuth redirect URL to `https://<your-domain>/auth/callback`.
 
 Day-to-day commands:

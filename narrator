@@ -163,50 +163,109 @@ check_port_available() {
     fi
 }
 
-check_firewall() {
-    local firewall_active=false
-    local firewall_name=""
+open_ufw_ports() {
+    ufw allow 80/tcp
+    ufw allow 443/tcp
+}
 
+open_firewalld_ports() {
+    firewall-cmd --permanent --add-service=http
+    firewall-cmd --permanent --add-service=https
+    firewall-cmd --reload
+}
+
+open_iptables_ports() {
+    # The stock OCI ruleset ends in a blanket REJECT, so an appended ACCEPT
+    # never matches - the rules have to go in above it.
+    local reject_line
+    reject_line=$(iptables -L INPUT --line-numbers -n | awk '$2 == "REJECT" {print $1; exit}')
+
+    if [[ -z "$reject_line" ]]; then
+        error "Could not find the REJECT rule to insert above; open the ports manually."
+        return 1
+    fi
+
+    local port
+    for port in 443 80; do
+        if iptables -C INPUT -p tcp --dport "$port" -j ACCEPT &>/dev/null; then
+            log "iptables already accepts ${port}/tcp"
+            continue
+        fi
+        iptables -I INPUT "$reject_line" -p tcp --dport "$port" -j ACCEPT
+        log "iptables now accepts ${port}/tcp"
+    done
+
+    if command -v netfilter-persistent &>/dev/null; then
+        netfilter-persistent save
+        success "Firewall rules saved across reboots"
+    else
+        warn "Rules are not persistent: install iptables-persistent to keep them after a reboot"
+    fi
+}
+
+detect_firewall() {
+    # Prints the firewall in charge, or nothing when the host is not filtering.
     if command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
-        firewall_active=true
-        firewall_name="ufw"
+        echo "ufw"
+        return
     fi
 
     if command -v firewall-cmd &>/dev/null && firewall-cmd --state &>/dev/null 2>&1; then
-        firewall_active=true
-        firewall_name="firewalld"
+        echo "firewalld"
+        return
     fi
 
-    # OCI images ship restrictive iptables rules even with no firewall front-end
-    if [[ "$firewall_active" == "false" ]] && iptables -L INPUT -n 2>/dev/null | grep -q REJECT; then
-        firewall_active=true
-        firewall_name="iptables"
+    # OCI images ship restrictive iptables rules with no firewall front-end
+    if iptables -L INPUT -n 2>/dev/null | grep -q REJECT; then
+        echo "iptables"
     fi
+}
 
-    if [[ "$firewall_active" == "true" ]]; then
-        warn "Host firewall ($firewall_name) is active"
+check_firewall() {
+    local firewall_name
+    firewall_name=$(detect_firewall)
+
+    if [[ -n "$firewall_name" ]]; then
+        warn "Host firewall ($firewall_name) is blocking inbound traffic"
         echo ""
-        echo "Ports 80/tcp and 443/tcp must be open for Let's Encrypt and the dashboard."
-        case "$firewall_name" in
-            ufw)
-                echo "  sudo ufw allow 80/tcp && sudo ufw allow 443/tcp"
-                ;;
-            firewalld)
-                echo "  sudo firewall-cmd --permanent --add-service=http"
-                echo "  sudo firewall-cmd --permanent --add-service=https"
-                echo "  sudo firewall-cmd --reload"
-                ;;
-            iptables)
-                echo "  sudo iptables -I INPUT 5 -p tcp --dport 80 -j ACCEPT"
-                echo "  sudo iptables -I INPUT 6 -p tcp --dport 443 -j ACCEPT"
-                echo "  sudo netfilter-persistent save   # Ubuntu"
-                ;;
-        esac
+        echo "Let's Encrypt has to reach this machine on port 80 to issue a certificate,"
+        echo "and the dashboard and overlay need 443."
+        echo ""
+        read -p "Open 80/tcp and 443/tcp now? [Y/n] " -r
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            echo ""
+            echo "Open them yourself before continuing:"
+            case "$firewall_name" in
+                ufw)
+                    echo "  sudo ufw allow 80/tcp && sudo ufw allow 443/tcp"
+                    ;;
+                firewalld)
+                    echo "  sudo firewall-cmd --permanent --add-service=http"
+                    echo "  sudo firewall-cmd --permanent --add-service=https"
+                    echo "  sudo firewall-cmd --reload"
+                    ;;
+                iptables)
+                    echo "  sudo iptables -I INPUT <line-above-REJECT> -p tcp --dport 80 -j ACCEPT"
+                    echo "  sudo iptables -I INPUT <line-above-REJECT> -p tcp --dport 443 -j ACCEPT"
+                    echo "  sudo netfilter-persistent save"
+                    ;;
+            esac
+        else
+            case "$firewall_name" in
+                ufw) open_ufw_ports ;;
+                firewalld) open_firewalld_ports ;;
+                iptables) open_iptables_ports ;;
+            esac
+        fi
         echo ""
     fi
 
-    echo "On Oracle Cloud the VCN security list (or NSG) must also allow 80/tcp and"
-    echo "443/tcp from 0.0.0.0/0 - the host firewall alone is not enough."
+    warn "Oracle Cloud filters twice"
+    echo ""
+    echo "The VCN security list (or the instance's NSG) must also allow ingress on"
+    echo "80/tcp and 443/tcp from 0.0.0.0/0. That is configured in the console, not"
+    echo "on this machine, and the host firewall alone is not enough:"
+    echo "  Networking -> Virtual Cloud Networks -> your VCN -> Security Lists"
     echo ""
     read -p "Continue? [Y/n] " -r
     if [[ $REPLY =~ ^[Nn]$ ]]; then
@@ -499,12 +558,27 @@ wait_for_health() {
     echo ""
     warn "Health check timed out"
     echo ""
-    echo "Troubleshooting:"
-    echo "  1. Check logs:     ./narrator logs"
-    echo "  2. App only:       ./narrator logs app"
-    echo "  3. TLS / Caddy:    ./narrator logs caddy"
-    echo "  4. Verify DNS:     getent hosts $DOMAIN"
-    echo "  5. Verify ports:   ss -tlnp | grep -E ':(80|443) '"
+
+    if $RUNTIME exec "$CONTAINER_NAME" curl -sf http://127.0.0.1:8000/health &>/dev/null; then
+        echo "The application is running - it is the certificate that has not been issued."
+        echo "Let's Encrypt reports a connection timeout when port 80 cannot be reached"
+        echo "from the internet. Check, in this order:"
+        echo ""
+        echo "  1. Oracle Cloud VCN security list / NSG: ingress 80 and 443 from 0.0.0.0/0"
+        echo "  2. Host firewall:  sudo iptables -L INPUT -n --line-numbers"
+        echo "  3. From elsewhere: curl -sv http://$DOMAIN/ 2>&1 | head"
+        echo ""
+        echo "Caddy retries on its own, so fixing the path is enough - no reinstall needed."
+        echo "Watch it with: ./narrator logs caddy"
+    else
+        echo "Troubleshooting:"
+        echo "  1. Check logs:     ./narrator logs"
+        echo "  2. App only:       ./narrator logs app"
+        echo "  3. TLS / Caddy:    ./narrator logs caddy"
+        echo "  4. Verify DNS:     getent hosts $DOMAIN"
+        echo "  5. Verify ports:   ss -tlnp | grep -E ':(80|443) '"
+    fi
+
     echo ""
     return 1
 }
