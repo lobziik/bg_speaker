@@ -219,11 +219,17 @@ Day-to-day commands:
 
 ```bash
 ./narrator status         # container + service status
+./narrator doctor         # find out why it is not serving
 ./narrator logs app       # narrator application log
 ./narrator logs caddy     # TLS / proxy log
 ./narrator restart
 ./narrator upgrade        # fetch the newest CLI, then restart
 ```
+
+`doctor` walks the path a request takes - container, systemd units, the app on
+loopback, the bound ports, the host firewall, DNS, reachability on the public
+address, and finally TLS - and reports the first thing that is not true. It is
+the quickest way to tell an application problem from a firewall one.
 
 State lives in two named volumes: `narrator-data` (SQLite database and cached
 Piper voices) and `narrator-caddy` (certificates). Configuration is written to

@@ -584,6 +584,132 @@ wait_for_health() {
 }
 
 # =============================================================================
+# Diagnostics
+# =============================================================================
+
+check_mark() {
+    # check_mark <ok|fail|warn> <text>
+    case "$1" in
+        ok)   success "$2" ;;
+        warn) warn "$2" ;;
+        *)    error "$2" ;;
+    esac
+}
+
+cmd_doctor() {
+    load_config
+
+    local external_ip resolved failures=0
+
+    echo ""
+    echo "=== narrator doctor ==="
+    echo ""
+
+    # --- the container itself -------------------------------------------------
+    if $RUNTIME ps --filter "name=$CONTAINER_NAME" --format "{{.Names}}" 2>/dev/null |
+        grep -q "$CONTAINER_NAME"; then
+        check_mark ok "Container is running"
+    else
+        check_mark fail "Container is not running - start it with: ./narrator start"
+        return 1
+    fi
+
+    local unit
+    for unit in narrator-init narrator-app narrator-caddy; do
+        if [[ "$($RUNTIME exec "$CONTAINER_NAME" systemctl is-active "$unit" 2>/dev/null)" == "active" ]]; then
+            check_mark ok "$unit is active"
+        else
+            check_mark fail "$unit is not active - see: ./narrator logs ${unit#narrator-}"
+            failures=$((failures + 1))
+        fi
+    done
+
+    # --- the application ------------------------------------------------------
+    if $RUNTIME exec "$CONTAINER_NAME" curl -sf http://127.0.0.1:8000/health &>/dev/null; then
+        check_mark ok "Application answers on loopback"
+    else
+        check_mark fail "Application is not answering - see: ./narrator logs app"
+        failures=$((failures + 1))
+    fi
+
+    # --- ports ----------------------------------------------------------------
+    local port
+    for port in 80 443; do
+        if ss -tln 2>/dev/null | grep -qE ":${port}\b"; then
+            check_mark ok "Port ${port} is bound on the host"
+        else
+            check_mark fail "Port ${port} is not bound - is another service using it?"
+            failures=$((failures + 1))
+        fi
+    done
+
+    # --- host firewall --------------------------------------------------------
+    local firewall_name
+    firewall_name=$(detect_firewall)
+    if [[ -z "$firewall_name" ]]; then
+        check_mark ok "No host firewall is filtering inbound traffic"
+    elif [[ "$firewall_name" == "iptables" ]] &&
+         iptables -C INPUT -p tcp --dport 80 -j ACCEPT &>/dev/null &&
+         iptables -C INPUT -p tcp --dport 443 -j ACCEPT &>/dev/null; then
+        check_mark ok "Host firewall (iptables) accepts 80 and 443"
+    else
+        check_mark warn "Host firewall ($firewall_name) may be blocking 80/443"
+        echo "         Re-run './narrator install' to open them, or do it by hand."
+        failures=$((failures + 1))
+    fi
+
+    # --- DNS ------------------------------------------------------------------
+    external_ip=$(detect_external_ip)
+    resolved=$(getent hosts "$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1)
+
+    if [[ -z "$resolved" ]]; then
+        check_mark fail "$DOMAIN does not resolve"
+        failures=$((failures + 1))
+    elif [[ -n "$external_ip" && "$resolved" != "$external_ip" ]]; then
+        check_mark fail "$DOMAIN resolves to $resolved, but this host is $external_ip"
+        failures=$((failures + 1))
+    else
+        check_mark ok "DNS: $DOMAIN -> $resolved"
+    fi
+
+    # --- reachability from outside the host -----------------------------------
+    # This is the check that separates the two Oracle Cloud layers: the request
+    # leaves the machine and comes back through the same path Let us Encrypt uses.
+    if [[ -n "$external_ip" ]]; then
+        if curl -sf --max-time 8 -o /dev/null "http://${external_ip}/" 2>/dev/null; then
+            check_mark ok "Port 80 answers on the public address"
+        else
+            check_mark fail "Port 80 does not answer on ${external_ip}"
+            echo "         The host firewall is only half of it on Oracle Cloud: the VCN"
+            echo "         security list (or NSG) must allow ingress 80 and 443 from"
+            echo "         0.0.0.0/0. Networking -> Virtual Cloud Networks -> Security Lists"
+            failures=$((failures + 1))
+        fi
+    fi
+
+    # --- certificate ----------------------------------------------------------
+    if $RUNTIME exec "$CONTAINER_NAME" curl -sf "https://${DOMAIN}/health" &>/dev/null; then
+        check_mark ok "HTTPS works: certificate issued and the proxy is serving"
+    else
+        check_mark warn "HTTPS is not serving yet"
+        local last_error
+        last_error=$($RUNTIME exec "$CONTAINER_NAME" journalctl -u narrator-caddy --no-pager 2>/dev/null |
+            grep -o '"error":"[^"]*"' | tail -1)
+        [[ -n "$last_error" ]] && echo "         Last TLS error: ${last_error}"
+        echo "         Caddy retries on its own once the path is open."
+        failures=$((failures + 1))
+    fi
+
+    echo ""
+    if [[ $failures -eq 0 ]]; then
+        success "Everything checks out - https://${DOMAIN}"
+    else
+        warn "$failures check(s) need attention"
+    fi
+    echo ""
+}
+
+# =============================================================================
 # Install Command
 # =============================================================================
 
@@ -634,6 +760,7 @@ Commands:
   logs caddy    Follow the Caddy / TLS logs
   logs init     Show the startup configuration log
   status        Show container and service status
+  doctor        Diagnose a broken install: services, ports, firewall, DNS, TLS
   upgrade       Fetch the latest CLI, then restart
   help          Show this message
 
@@ -706,6 +833,10 @@ main() {
         status)
             [[ -z "$RUNTIME" ]] && { error "No container runtime found"; exit 1; }
             cmd_status
+            ;;
+        doctor)
+            [[ -z "$RUNTIME" ]] && { error "No container runtime found"; exit 1; }
+            cmd_doctor
             ;;
         upgrade)
             [[ -z "$RUNTIME" ]] && { error "No container runtime found"; exit 1; }

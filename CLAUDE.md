@@ -303,6 +303,11 @@ Gotchas that are easy to reintroduce:
 - buildah produces OCI images, which drop the Dockerfile `HEALTHCHECK`. The `narrator` CLI therefore
   passes `--health-cmd` at `podman run` time.
 
+`./narrator doctor` walks the request path end to end - container, units, app on loopback, bound
+ports, host firewall, DNS, reachability on the public address, TLS - so a broken deployment is
+diagnosed on the machine rather than by reading logs. Extend it when a new failure mode costs
+more than one round trip to diagnose.
+
 `.github/workflows/release.yml` builds amd64 and arm64 on native runners with buildah, pushes both to
 GHCR, joins them into a manifest, and attaches the `narrator` CLI to the GitHub release (with
 `VERSION="dev"` rewritten to the tag). Deployment on the VM is `./narrator install`.
