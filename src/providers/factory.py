@@ -92,6 +92,11 @@ def build_llm_provider(
                 model=gemini_settings.model,
                 temperature=gemini_settings.temperature,
                 max_output_tokens=gemini_settings.max_output_tokens,
+                thinking_level=(
+                    gemini_settings.thinking_level.value
+                    if gemini_settings.thinking_level is not None
+                    else None
+                ),
                 thinking_budget=gemini_settings.thinking_budget,
                 safety_threshold=gemini_settings.safety_threshold.value,
             )

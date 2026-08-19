@@ -66,43 +66,28 @@ class TestGeminiLLMProviderConstruction:
         assert provider._model == "gemini-3.6-flash"
         assert provider._temperature == 0.8
         assert provider._max_output_tokens == 500
-        assert provider._thinking_budget == 0
-
-    def test_pro_rejects_zero_thinking_budget(self, mock_api_key: SecretStr) -> None:
-        """2.5 Pro cannot disable thinking - fail at construction, not at request time."""
-        with pytest.raises(ValueError, match="cannot disable thinking"):
-            GeminiLLMProvider(
-                api_key=mock_api_key,
-                model="gemini-2.5-pro",
-                thinking_budget=0,
-            )
-
-    def test_pro_accepts_positive_thinking_budget(self, mock_api_key: SecretStr) -> None:
-        """A positive budget is valid for 2.5 Pro."""
-        provider = GeminiLLMProvider(
-            api_key=mock_api_key,
-            model="gemini-2.5-pro",
-            thinking_budget=256,
-        )
-        assert provider._thinking_budget == 256
-
-    def test_model_without_thinking_rejects_budget(self, mock_api_key: SecretStr) -> None:
-        """2.0 Flash has no thinking config at all."""
-        with pytest.raises(ValueError, match="does not support a thinking budget"):
-            GeminiLLMProvider(
-                api_key=mock_api_key,
-                model="gemini-2.0-flash",
-                thinking_budget=0,
-            )
-
-    def test_model_without_thinking_accepts_none(self, mock_api_key: SecretStr) -> None:
-        """None omits the thinking config, which 2.0 Flash requires."""
-        provider = GeminiLLMProvider(
-            api_key=mock_api_key,
-            model="gemini-2.0-flash",
-            thinking_budget=None,
-        )
+        assert provider._thinking_level is genai_types.ThinkingLevel.MINIMAL
         assert provider._thinking_budget is None
+
+    def test_both_thinking_controls_rejected(self, mock_api_key: SecretStr) -> None:
+        """They are two spellings of one control, and the API rejects the pair."""
+        with pytest.raises(ValueError, match="not both"):
+            GeminiLLMProvider(api_key=mock_api_key, thinking_level="MINIMAL", thinking_budget=0)
+
+    def test_budget_used_when_no_level_is_set(self, mock_api_key: SecretStr) -> None:
+        """The numeric control still works for a model that wants it."""
+        provider = GeminiLLMProvider(api_key=mock_api_key, thinking_level=None, thinking_budget=-1)
+
+        config = provider._build_config("system", None)
+
+        assert config.thinking_config is not None
+        assert config.thinking_config.thinking_budget == -1
+        assert config.thinking_config.thinking_level is None
+
+    def test_invalid_thinking_level(self, mock_api_key: SecretStr) -> None:
+        """An unknown level is rejected rather than passed through."""
+        with pytest.raises(ValueError, match="Invalid thinking_level"):
+            GeminiLLMProvider(api_key=mock_api_key, thinking_level="TURBO")
 
     def test_invalid_safety_threshold(self, mock_api_key: SecretStr) -> None:
         """An unknown threshold name is rejected with the valid values listed."""
@@ -129,15 +114,15 @@ class TestGeminiLLMConfig:
         assert config.response_mime_type == "application/json"
         assert config.response_schema is schema
         assert config.thinking_config is not None
-        assert config.thinking_config.thinking_budget == 0
+        assert config.thinking_config.thinking_level is genai_types.ThinkingLevel.MINIMAL
         assert config.safety_settings is not None
         assert len(config.safety_settings) == 4
 
-    def test_config_omits_thinking_when_none(self, mock_api_key: SecretStr) -> None:
-        """thinking_budget=None leaves the thinking config out entirely."""
+    def test_config_omits_thinking_when_unset(self, mock_api_key: SecretStr) -> None:
+        """With neither control set the model decides for itself."""
         provider = GeminiLLMProvider(
             api_key=mock_api_key,
-            model="gemini-2.0-flash",
+            thinking_level=None,
             thinking_budget=None,
         )
 
@@ -211,6 +196,35 @@ class TestGeminiLLMMetadata:
         assert all(isinstance(m, Model) for m in models)
         assert any(m.id == "gemini-3.6-flash" for m in models)
 
+    @pytest.mark.asyncio
+    async def test_listing_skips_models_that_cannot_narrate(self) -> None:
+        """The same listing carries speech, image and agent models."""
+        provider = GeminiLLMProvider(api_key=SecretStr("test"))
+        provider._client.aio.models.list = AsyncMock(  # type: ignore[method-assign]
+            return_value=_FakePager(
+                [
+                    genai_types.Model(
+                        name="models/gemini-9.9-flash",
+                        supported_actions=["generateContent"],
+                    ),
+                    genai_types.Model(
+                        name="models/gemini-9.9-flash-preview-tts",
+                        supported_actions=["generateContent"],
+                    ),
+                    genai_types.Model(
+                        name="models/nano-banana-pro",
+                        supported_actions=["generateContent"],
+                    ),
+                    genai_types.Model(
+                        name="models/deep-research-preview",
+                        supported_actions=["generateContent"],
+                    ),
+                ]
+            )
+        )
+
+        assert [m.id for m in await provider.list_models()] == ["gemini-9.9-flash"]
+
     def test_settings_schema(self, mock_api_key: SecretStr) -> None:
         """The UI schema exposes every constructor knob."""
         provider = GeminiLLMProvider(api_key=mock_api_key)
@@ -222,6 +236,7 @@ class TestGeminiLLMMetadata:
             "model",
             "temperature",
             "max_output_tokens",
+            "thinking_level",
             "thinking_budget",
             "safety_threshold",
         }

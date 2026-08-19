@@ -125,8 +125,13 @@ previous providers. It also creates and starts the worker if it does not exist y
   (`additionalProperties`) the Gemini API rejects.
 - The SDK's enums accept unknown values with only a `UserWarning`, so `safety_threshold` is
   validated against actual members before use.
-- `thinking_budget` is validated against the model at construction: 2.5 Pro cannot use `0`,
-  2.0 Flash cannot take a budget at all.
+- Reasoning effort is set with `thinking_level` (MINIMAL by default, for narration latency).
+  `thinking_budget` is the older numeric form and is only used when no level is set; the two are
+  mutually exclusive and the provider refuses both at once. A budget of `0` is rejected by current
+  models with a bare `400 INVALID_ARGUMENT`, which is why the level is the default and why a 400
+  logs the thinking and safety settings that were sent.
+- There is no hardcoded table of per-model thinking rules any more: it went stale (it named models
+  the API now 404s for) and the API is the authority.
 - A safety-filter refusal raises `LLMContentBlockedError`, which the pipeline maps onto
   `ModerationRejectedError` - points are consumed, not refunded, same as a policy violation.
 - Gemini TTS returns raw PCM; the sample rate is parsed from the part's mime type

@@ -13,6 +13,7 @@ from src.db.manager import DatabaseManager
 from src.db.repositories.settings import SettingsRepository
 from src.models.settings import (
     GeminiLLMSettings,
+    GeminiThinkingLevel,
     GroqLLMSettings,
     LLMProviderName,
     PiperSettings,
@@ -28,8 +29,12 @@ from src.views.settings import (
 )
 
 # A combination the settings model accepts field by field but the provider
-# refuses: 2.5 Pro cannot run with thinking disabled.
-UNBUILDABLE_GEMINI = GeminiLLMSettings(model="gemini-2.5-pro", thinking_budget=0)
+# refuses: the two thinking controls are mutually exclusive.
+UNBUILDABLE_GEMINI = GeminiLLMSettings(
+    model="gemini-3.5-flash",
+    thinking_level=GeminiThinkingLevel.MINIMAL,
+    thinking_budget=0,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -85,14 +90,14 @@ class TestRejectedBeforeStoring:
     """Settings that cannot build a provider never reach the database."""
 
     @pytest.mark.asyncio
-    async def test_model_and_budget_mismatch_is_reported(self) -> None:
-        """2.5 Pro with thinking disabled is caught before the row is written."""
+    async def test_conflicting_thinking_controls_are_reported(self) -> None:
+        """A combination the provider refuses is caught before the row is written."""
         problem = await _rejected_by_llm_provider(
             _state(), LLMProviderName.GEMINI, UNBUILDABLE_GEMINI
         )
 
         assert problem is not None
-        assert "cannot disable thinking" in problem
+        assert "not both" in problem
 
     @pytest.mark.asyncio
     async def test_valid_settings_pass(self) -> None:
@@ -156,12 +161,12 @@ class TestFormsSurviveBadStoredSettings:
         )
 
         gemini = next(form for form in forms if form.key == "gemini_llm")
-        assert "cannot disable thinking" in gemini.problem
-        # The form is still rendered, showing the offending value, so it can be
+        assert "not both" in gemini.problem
+        # The form is still rendered, showing the offending values, so it can be
         # corrected without editing SQLite by hand.
         assert [field.name for field in gemini.fields]
         model_field = next(field for field in gemini.fields if field.name == "model")
-        assert model_field.value == "gemini-2.5-pro"
+        assert model_field.value == "gemini-3.5-flash"
 
     @pytest.mark.asyncio
     async def test_healthy_settings_report_no_problem(self, repo: SettingsRepository) -> None:

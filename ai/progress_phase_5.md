@@ -137,6 +137,24 @@ usable parts were wired up and the rest removed.
 - [x] A failed or empty listing logs a warning and falls back to the built-in
   catalogue, which is what keeps `AVAILABLE_MODELS` meaningful.
 
+### 10. First Contact With the Live API
+
+Running a real narration surfaced three things the offline work could not.
+
+- [x] `thinking_budget=0`, the shipped default, is rejected by the current model
+  with a bare `400 INVALID_ARGUMENT` naming no field. Bisecting the request
+  showed the budget was the only offending argument. Reasoning effort is now set
+  with `thinking_level` (MINIMAL by default), verified against the live API; the
+  numeric budget remains for models that want it, and the two are mutually
+  exclusive.
+- [x] The per-model thinking table named `gemini-2.5-pro` and `gemini-2.0-flash`,
+  which this key now gets a 404 for. It is gone - the API is the authority, and a
+  400 now logs the thinking and safety settings that were sent so the cause is
+  visible.
+- [x] Filtering the listing on `supported_actions` alone was too permissive: the
+  same call returns speech, image, music, robotics and agent models, so the
+  dropdown offered "Nano Banana Pro" as a narrator. Those are excluded by marker.
+
 ## Bugs Found and Fixed Along the Way
 
 - `NarratorSettings.system_prompt` was never reaching the LLM: the pipeline's
