@@ -16,9 +16,7 @@ async def health_check(state: AppStateDep) -> dict[str, object]:
     Returns:
         Dictionary with health status of all components.
     """
-    twitch_connected = (
-        state.twitch_eventsub is not None and state.twitch_eventsub.is_connected
-    )
+    twitch_connected = state.twitch_eventsub is not None and state.twitch_eventsub.is_connected
 
     rate_status = state.rate_limiter.get_status()
 

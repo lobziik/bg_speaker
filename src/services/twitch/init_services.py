@@ -78,9 +78,10 @@ async def initialize_twitch_services(
 
         # Load reward settings from DB
         settings_repo = SettingsRepository(state.db.connection)
-        reward_settings = await settings_repo.get(
-            "reward", TwitchRewardSettings, TwitchRewardSettings()
-        ) or TwitchRewardSettings()
+        reward_settings = (
+            await settings_repo.get("reward", TwitchRewardSettings, TwitchRewardSettings())
+            or TwitchRewardSettings()
+        )
 
         # Create reward config from settings
         reward_config = RewardConfig(

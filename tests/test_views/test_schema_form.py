@@ -35,9 +35,7 @@ class TestFieldKinds:
 
     def test_number_carries_its_bounds(self) -> None:
         """Numeric bounds reach the input so the browser can enforce them."""
-        schema = _schema(
-            temperature={"type": "number", "minimum": 0, "maximum": 2, "default": 0.8}
-        )
+        schema = _schema(temperature={"type": "number", "minimum": 0, "maximum": 2, "default": 0.8})
 
         field = build_fields(schema, {})[0]
 

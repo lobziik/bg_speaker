@@ -75,9 +75,7 @@ class DatabaseManager:
             DatabaseNotInitializedError: If not initialized.
         """
         if self._connection is None:
-            raise DatabaseNotInitializedError(
-                "Database not initialized. Call initialize() first."
-            )
+            raise DatabaseNotInitializedError("Database not initialized. Call initialize() first.")
         return self._connection
 
     async def initialize(self) -> None:
@@ -181,6 +179,4 @@ class DatabaseManager:
                     name=migration_file.name,
                     error=str(e),
                 )
-                raise MigrationError(
-                    f"Migration {migration_file.name} failed: {e}"
-                ) from e
+                raise MigrationError(f"Migration {migration_file.name} failed: {e}") from e

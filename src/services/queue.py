@@ -164,9 +164,7 @@ class NarrationQueue:
             # Validate message length
             msg_len = len(message)
             if not (
-                self._settings.message_min_length
-                <= msg_len
-                <= self._settings.message_max_length
+                self._settings.message_min_length <= msg_len <= self._settings.message_max_length
             ):
                 logger.info(
                     "message_length_invalid",
@@ -181,10 +179,7 @@ class NarrationQueue:
 
             # Check user cooldown (but don't acquire - just check)
             rate_result = await self._rate_limiter.check(user)
-            if (
-                not rate_result.allowed
-                and rate_result.reason == RejectionReason.USER_COOLDOWN
-            ):
+            if not rate_result.allowed and rate_result.reason == RejectionReason.USER_COOLDOWN:
                 return QueueAddResult(
                     success=False,
                     rejection_reason=rate_result.reason,

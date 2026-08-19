@@ -82,9 +82,7 @@ class _EventSubClient(twitchio.Client):
         client_secret: SecretStr,
         access_token: str,
         refresh_token: str,
-        redemption_callback: Callable[
-            [ChannelPointsRedemptionAdd], Awaitable[None]
-        ],
+        redemption_callback: Callable[[ChannelPointsRedemptionAdd], Awaitable[None]],
     ) -> None:
         super().__init__(
             client_id=client_id,
@@ -211,16 +209,13 @@ class TwitchEventSubService:
 
             # Add the user token to twitchio's HTTP manager for API calls
             # TwitchIO stores tokens keyed by user_id from its validation response
-            token_payload = await self._client.add_token(
-                self._access_token, self._refresh_token
-            )
+            token_payload = await self._client.add_token(self._access_token, self._refresh_token)
             logger.info(
                 "eventsub_token_added",
                 broadcaster_id=self._broadcaster_id,
                 token_user_id=token_payload.user_id,
                 token_login=token_payload.login,
-                user_id_matches_broadcaster=token_payload.user_id
-                == self._broadcaster_id,
+                user_id_matches_broadcaster=token_payload.user_id == self._broadcaster_id,
             )
 
             # Create subscription payload

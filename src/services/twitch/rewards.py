@@ -249,9 +249,7 @@ class TwitchRewardController:
     def _ensure_initialized(self) -> None:
         """Ensure reward controller is initialized."""
         if self._http is None or self._reward_id is None:
-            raise RewardOperationError(
-                "RewardController not initialized. Call initialize() first."
-            )
+            raise RewardOperationError("RewardController not initialized. Call initialize() first.")
 
     async def _find_reward_by_title(self, title: str) -> Reward | None:
         """Find manageable reward by exact title match."""
@@ -287,9 +285,9 @@ class TwitchRewardController:
                     is_enabled=reward_data["is_enabled"],
                     is_paused=reward_data["is_paused"],
                     is_in_stock=reward_data["is_in_stock"],
-                    cooldown_seconds=reward_data.get(
-                        "global_cooldown_setting", {}
-                    ).get("global_cooldown_seconds", 0),
+                    cooldown_seconds=reward_data.get("global_cooldown_setting", {}).get(
+                        "global_cooldown_seconds", 0
+                    ),
                 )
         return None
 

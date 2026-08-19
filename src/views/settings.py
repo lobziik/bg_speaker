@@ -56,12 +56,14 @@ router = APIRouter()
 def _toast_response(message: str, success: bool = True) -> dict[str, Any]:
     """Create HX-Trigger header for toast notification."""
     return {
-        "HX-Trigger": json.dumps({
-            "showToast": {
-                "message": message,
-                "type": "success" if success else "error",
+        "HX-Trigger": json.dumps(
+            {
+                "showToast": {
+                    "message": message,
+                    "type": "success" if success else "error",
+                }
             }
-        })
+        )
     }
 
 
@@ -285,9 +287,7 @@ async def settings_page(
     prompts = await settings_repo.get_or_default("prompts", PromptSettings, PromptSettings())
 
     providers = await load_provider_settings(settings_repo, state.env)
-    provider_forms, piper_voices = await _build_provider_forms(
-        state, settings_repo, providers
-    )
+    provider_forms, piper_voices = await _build_provider_forms(state, settings_repo, providers)
 
     # Get available providers from environment (only configured + implemented)
     available_llm = state.env.get_available_llm_providers()
@@ -385,9 +385,7 @@ async def save_queue_settings(
     form_data = await request.form()
 
     priority_users_str = str(form_data.get("priority_users", ""))
-    priority_users = [
-        u.strip() for u in priority_users_str.split(",") if u.strip()
-    ]
+    priority_users = [u.strip() for u in priority_users_str.split(",") if u.strip()]
 
     settings = QueueSettings(
         max_size=int(str(form_data["max_size"])),
@@ -466,9 +464,7 @@ async def save_reward_settings(
 
     # Update global cooldown manager with new duration
     if state.global_cooldown:
-        await state.global_cooldown.update_cooldown_duration(
-            settings.global_cooldown_seconds
-        )
+        await state.global_cooldown.update_cooldown_duration(settings.global_cooldown_seconds)
 
     return Response(
         content="<div class='toast success'>Reward settings saved</div>",
@@ -668,11 +664,7 @@ def _invalid_settings_toast(error: ValidationError | ValueError) -> Response:
     Returns:
         HTMX toast response naming the offending field.
     """
-    detail = (
-        _first_validation_message(error)
-        if isinstance(error, ValidationError)
-        else str(error)
-    )
+    detail = _first_validation_message(error) if isinstance(error, ValidationError) else str(error)
     message = f"Not saved - {detail}"
     return Response(
         content=f"<div class='toast error'>{message}</div>",
@@ -763,9 +755,7 @@ async def save_gemini_llm_settings(
     if active.llm is not LLMProviderName.GEMINI:
         return Response(
             content="<div class='toast success'>Gemini LLM settings saved</div>",
-            headers=_toast_response(
-                "Gemini LLM settings saved (Gemini is not the active LLM)"
-            ),
+            headers=_toast_response("Gemini LLM settings saved (Gemini is not the active LLM)"),
         )
 
     return await _rebuild_and_report(state, success_message="Gemini LLM settings applied")

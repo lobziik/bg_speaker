@@ -42,9 +42,7 @@ class TestRateLimiterCheck:
         assert result.retry_after_seconds > 0
 
     @pytest.mark.asyncio
-    async def test_check_allows_different_users(
-        self, rate_limiter: RateLimiter
-    ) -> None:
+    async def test_check_allows_different_users(self, rate_limiter: RateLimiter) -> None:
         """Different users should not affect each other's cooldown."""
         await rate_limiter.acquire("user1")
 
@@ -63,9 +61,7 @@ class TestRateLimiterAcquire:
         assert result.allowed is True
 
     @pytest.mark.asyncio
-    async def test_acquire_respects_tts_rate_limit(
-        self, rate_limiter: RateLimiter
-    ) -> None:
+    async def test_acquire_respects_tts_rate_limit(self, rate_limiter: RateLimiter) -> None:
         """Rapid acquires should be blocked by TTS rate limit."""
         # First acquire
         result1 = await rate_limiter.acquire("user1")
@@ -77,9 +73,7 @@ class TestRateLimiterAcquire:
         assert result2.reason == RejectionReason.TTS_RATE_LIMITED
 
     @pytest.mark.asyncio
-    async def test_acquire_respects_user_cooldown(
-        self, rate_limiter: RateLimiter
-    ) -> None:
+    async def test_acquire_respects_user_cooldown(self, rate_limiter: RateLimiter) -> None:
         """Same user should be blocked by cooldown."""
         await rate_limiter.acquire("user1")
 

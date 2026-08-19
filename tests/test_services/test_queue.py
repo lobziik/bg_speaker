@@ -150,9 +150,7 @@ class TestQueueEvents:
         """Should emit ITEM_ADDED event when adding item."""
         events: list[tuple[QueueEventType, QueueItem | None]] = []
 
-        async def handler(
-            event_type: QueueEventType, item: QueueItem | None
-        ) -> None:
+        async def handler(event_type: QueueEventType, item: QueueItem | None) -> None:
             events.append((event_type, item))
 
         queue.on_event(handler)
@@ -172,9 +170,7 @@ class TestQueueEvents:
 
         events: list[tuple[QueueEventType, QueueItem | None]] = []
 
-        async def handler(
-            event_type: QueueEventType, item: QueueItem | None
-        ) -> None:
+        async def handler(event_type: QueueEventType, item: QueueItem | None) -> None:
             events.append((event_type, item))
 
         small_queue.on_event(handler)

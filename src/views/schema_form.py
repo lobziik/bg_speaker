@@ -156,9 +156,7 @@ def _field_types(prop: dict[str, object], context: str) -> tuple[str, bool]:
         names = [_as_str(entry, f"{context}.type") for entry in raw]
         concrete = [name for name in names if name != "null"]
         if len(concrete) != 1:
-            raise SchemaError(
-                f"{context}: expected exactly one non-null type, got {names}"
-            )
+            raise SchemaError(f"{context}: expected exactly one non-null type, got {names}")
         return concrete[0], "null" in names
 
     raise SchemaError(f"{context}: 'type' is required and must be a string or list")

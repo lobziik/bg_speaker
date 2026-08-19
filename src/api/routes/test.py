@@ -90,9 +90,7 @@ async def get_queue(state: AppStateDep) -> dict[str, object]:
             {
                 "id": item.id,
                 "user": item.user,
-                "message": (
-                    item.message[:50] + "..." if len(item.message) > 50 else item.message
-                ),
+                "message": (item.message[:50] + "..." if len(item.message) > 50 else item.message),
                 "priority": item.priority,
                 "created_at": item.created_at.isoformat(),
             }

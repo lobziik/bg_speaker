@@ -81,9 +81,7 @@ class TestWebSocketManagerConnect:
         assert msg["connected"] is True
 
     @pytest.mark.asyncio
-    async def test_connect_multiple_clients(
-        self, ws_manager: WebSocketManager
-    ) -> None:
+    async def test_connect_multiple_clients(self, ws_manager: WebSocketManager) -> None:
         """Should handle multiple concurrent connections."""
         ws1 = MockWebSocket()
         ws2 = MockWebSocket()
@@ -179,9 +177,7 @@ class TestWebSocketManagerBroadcast:
         assert msg["duration_ms"] == 5000
 
     @pytest.mark.asyncio
-    async def test_broadcast_to_multiple_clients(
-        self, ws_manager: WebSocketManager
-    ) -> None:
+    async def test_broadcast_to_multiple_clients(self, ws_manager: WebSocketManager) -> None:
         """Should broadcast to all connected clients."""
         ws1 = MockWebSocket()
         ws2 = MockWebSocket()
@@ -272,9 +268,7 @@ class TestWebSocketManagerShutdown:
     """Tests for shutdown behavior."""
 
     @pytest.mark.asyncio
-    async def test_shutdown_closes_all_connections(
-        self, ws_manager: WebSocketManager
-    ) -> None:
+    async def test_shutdown_closes_all_connections(self, ws_manager: WebSocketManager) -> None:
         """Shutdown should close all connections."""
         ws1 = MockWebSocket()
         ws2 = MockWebSocket()
