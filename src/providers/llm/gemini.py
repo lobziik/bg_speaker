@@ -78,10 +78,15 @@ class GeminiLLMProvider:
       ordinary fantasy combat description
     - Shares GEMINI_API_KEY with the Gemini TTS provider
 
-    Recommended model: gemini-2.5-flash
+    Recommended model: gemini-3.6-flash
     """
 
     AVAILABLE_MODELS: ClassVar[list[Model]] = [
+        Model(
+            id="gemini-3.6-flash",
+            name="Gemini 3.6 Flash",
+            context_length=1_048_576,
+        ),
         Model(
             id="gemini-2.5-flash",
             name="Gemini 2.5 Flash",
@@ -112,7 +117,7 @@ class GeminiLLMProvider:
     def __init__(
         self,
         api_key: SecretStr,
-        model: str = "gemini-2.5-flash",
+        model: str = "gemini-3.6-flash",
         temperature: float = 0.8,
         max_output_tokens: int = 500,
         thinking_budget: int | None = 0,
@@ -577,7 +582,7 @@ class GeminiLLMProvider:
                     "type": "string",
                     "title": "Model",
                     "description": "Gemini model to use",
-                    "default": "gemini-2.5-flash",
+                    "default": "gemini-3.6-flash",
                     "enum": [m.id for m in self.AVAILABLE_MODELS],
                 },
                 "temperature": {
@@ -600,7 +605,7 @@ class GeminiLLMProvider:
                     "type": ["integer", "null"],
                     "title": "Thinking Budget",
                     "description": (
-                        "0 disables thinking (lowest latency, 2.5 Flash/Flash-Lite only), "
+                        "0 disables thinking (lowest latency, Flash models only), "
                         "-1 lets the model decide, null uses the model default"
                     ),
                     "default": 0,
