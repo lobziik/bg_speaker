@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Request
@@ -29,17 +30,25 @@ from src.models.settings import (
     TTSVoiceSettings,
     TwitchRewardSettings,
 )
-from src.providers.factory import ProviderConfigurationError, load_provider_settings
-from src.providers.llm.gemini import GeminiLLMProvider
-from src.providers.llm.groq import GroqLLMProvider
+from src.providers.factory import (
+    ProviderConfigurationError,
+    build_llm_provider,
+    build_tts_provider,
+    load_provider_settings,
+)
 from src.providers.llm.prompts import PromptSettings
-from src.providers.tts.gemini import GEMINI_VOICES, GeminiTTSProvider, GeminiTTSSettings
-from src.providers.tts.piper import DEFAULT_VOICES, LANGUAGE_DEFAULT_VOICES, PiperTTSProvider
+from src.providers.tts.gemini import GeminiTTSSettings
+from src.providers.tts.piper import LANGUAGE_DEFAULT_VOICES, PiperTTSProvider
+from src.views.schema_form import FieldOption, SettingsField, build_fields
 
 if TYPE_CHECKING:
     from starlette.datastructures import FormData
 
     from src.api.dependencies import AppState
+    from src.core.types import StrictModel
+    from src.db.repositories.settings import SettingsRepository
+    from src.providers.llm.base import LLMProvider
+    from src.providers.tts.base import TTSProvider, Voice
 
 router = APIRouter()
 
@@ -56,6 +65,206 @@ def _toast_response(message: str, success: bool = True) -> dict[str, Any]:
     }
 
 
+# Which settings key, label and catalogue field belong to each provider. The
+# catalogue field is the one whose options come from the provider's own
+# list_models() / list_voices(), rather than from the schema's enum.
+LLM_FORM_SPECS: tuple[tuple[LLMProviderName, str, str, type[StrictModel], str], ...] = (
+    (LLMProviderName.GROQ, "groq_llm", "Groq", GroqLLMSettings, "model"),
+    (LLMProviderName.GEMINI, "gemini_llm", "Gemini", GeminiLLMSettings, "model"),
+)
+
+TTS_FORM_SPECS: tuple[tuple[TTSProviderName, str, str, type[StrictModel], str], ...] = (
+    (TTSProviderName.PIPER, "piper", "Piper", PiperSettings, "voice"),
+    (TTSProviderName.GEMINI, "gemini_tts", "Gemini", GeminiTTSSettings, "voice_name"),
+)
+
+
+@dataclass(frozen=True)
+class ProviderForm:
+    """One provider's settings form, rendered from its own schema.
+
+    Attributes:
+        key: Settings key the form posts to.
+        provider: Provider name ("groq", "gemini", "piper").
+        kind: "LLM" or "TTS", for grouping in the UI.
+        title: Section heading.
+        active: Whether this provider is the one currently in use.
+        configured: Whether its credentials are present, so it can be built.
+        fields: Controls parsed from the provider's settings schema.
+        supports_voice_test: Whether the section offers a voice preview button.
+    """
+
+    key: str
+    provider: str
+    kind: str
+    title: str
+    active: bool
+    configured: bool
+    fields: list[SettingsField]
+    supports_voice_test: bool
+
+
+async def _llm_catalogue(provider: LLMProvider, field: str) -> dict[str, list[FieldOption]]:
+    """Fetch the provider's model catalogue as select options.
+
+    Args:
+        provider: Provider instance to ask.
+        field: Schema field the models belong to.
+
+    Returns:
+        Options keyed by field name, for build_fields().
+    """
+    models = await provider.list_models()
+    return {field: [FieldOption(value=model.id, label=model.name) for model in models]}
+
+
+async def _tts_catalogue(provider: TTSProvider, field: str) -> dict[str, list[FieldOption]]:
+    """Fetch the provider's voice catalogue as select options.
+
+    Args:
+        provider: Provider instance to ask.
+        field: Schema field the voices belong to.
+
+    Returns:
+        Options keyed by field name, for build_fields().
+    """
+    voices = await provider.list_voices()
+    return {field: [FieldOption(value=voice.id, label=voice.name) for voice in voices]}
+
+
+async def _build_provider_forms(
+    state: AppState,
+    settings_repo: SettingsRepository,
+    selection: ProviderSettings,
+) -> tuple[list[ProviderForm], list[Voice]]:
+    """Build a settings form for every implemented provider.
+
+    Each form comes from the provider's own ``get_settings_schema()``, with the
+    model or voice dropdown filled from ``list_models()`` / ``list_voices()``.
+    Providers that are not the active one are instantiated briefly and closed
+    again; constructing them performs no network I/O.
+
+    Args:
+        state: Application state, for the environment and running providers.
+        settings_repo: Repository holding the stored per-provider settings.
+        selection: The currently active provider selection.
+
+    Returns:
+        Tuple of (forms, piper voice catalogue). The voice catalogue is reused
+        by the per-language override tab.
+    """
+    available_llm = state.env.get_available_llm_providers()
+    available_tts = state.env.get_available_tts_providers()
+
+    groq_settings = await settings_repo.get_or_default(
+        "groq_llm", GroqLLMSettings, GroqLLMSettings()
+    )
+    gemini_llm_settings = await settings_repo.get_or_default(
+        "gemini_llm", GeminiLLMSettings, GeminiLLMSettings()
+    )
+    piper_settings = await settings_repo.get_or_default("piper", PiperSettings, PiperSettings())
+    gemini_tts_settings = await settings_repo.get_or_default(
+        "gemini_tts", GeminiTTSSettings, GeminiTTSSettings()
+    )
+    voice_overrides = await settings_repo.get_or_default(
+        "tts_voice", TTSVoiceSettings, TTSVoiceSettings()
+    )
+
+    stored: dict[str, StrictModel] = {
+        "groq_llm": groq_settings,
+        "gemini_llm": gemini_llm_settings,
+        "piper": piper_settings,
+        "gemini_tts": gemini_tts_settings,
+    }
+
+    forms: list[ProviderForm] = []
+    piper_voices: list[Voice] = []
+
+    for llm_name, key, label, _model, catalogue_field in LLM_FORM_SPECS:
+        configured = llm_name.value in available_llm
+        active = selection.llm is llm_name
+        llm_fields: list[SettingsField] = []
+
+        if configured:
+            llm_provider = (
+                state.llm_provider
+                if active and state.llm_provider is not None
+                else build_llm_provider(
+                    env=state.env,
+                    provider=llm_name,
+                    groq_settings=groq_settings,
+                    gemini_settings=gemini_llm_settings,
+                )
+            )
+            try:
+                llm_fields = build_fields(
+                    llm_provider.get_settings_schema(),
+                    stored[key].model_dump(),
+                    await _llm_catalogue(llm_provider, catalogue_field),
+                )
+            finally:
+                if llm_provider is not state.llm_provider:
+                    await llm_provider.close()
+
+        forms.append(
+            ProviderForm(
+                key=key,
+                provider=llm_name.value,
+                kind="LLM",
+                title=f"{label} (LLM)",
+                active=active,
+                configured=configured,
+                fields=llm_fields,
+                supports_voice_test=False,
+            )
+        )
+
+    for tts_name, key, label, _model, catalogue_field in TTS_FORM_SPECS:
+        configured = tts_name.value in available_tts
+        active = selection.tts is tts_name
+        tts_fields: list[SettingsField] = []
+
+        if configured:
+            tts_provider = (
+                state.tts_provider
+                if active and state.tts_provider is not None
+                else build_tts_provider(
+                    env=state.env,
+                    provider=tts_name,
+                    piper_settings=piper_settings,
+                    piper_voice_settings=voice_overrides,
+                    gemini_settings=gemini_tts_settings,
+                )
+            )
+            try:
+                catalogue = await _tts_catalogue(tts_provider, catalogue_field)
+                if tts_name is TTSProviderName.PIPER:
+                    piper_voices = await tts_provider.list_voices()
+                tts_fields = build_fields(
+                    tts_provider.get_settings_schema(),
+                    stored[key].model_dump(),
+                    catalogue,
+                )
+            finally:
+                if tts_provider is not state.tts_provider:
+                    await tts_provider.close()
+
+        forms.append(
+            ProviderForm(
+                key=key,
+                provider=tts_name.value,
+                kind="TTS",
+                title=f"{label} (TTS)",
+                active=active,
+                configured=configured,
+                fields=tts_fields,
+                supports_voice_test=active,
+            )
+        )
+
+    return forms, piper_voices
+
+
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(
     request: Request,
@@ -70,42 +279,29 @@ async def settings_page(
     queue = await settings_repo.get("queue", QueueSettings, QueueSettings())
     overlay = await settings_repo.get("overlay", OverlaySettings, OverlaySettings())
     reward = await settings_repo.get("reward", TwitchRewardSettings, TwitchRewardSettings())
-    tts_voice = await settings_repo.get(
+    tts_voice = await settings_repo.get_or_default(
         "tts_voice", TTSVoiceSettings, TTSVoiceSettings()
     )
-    piper = await settings_repo.get("piper", PiperSettings, PiperSettings())
-
-    # Provider selection and per-provider settings
-    providers = await load_provider_settings(settings_repo, state.env)
-    groq_llm = await settings_repo.get_or_default(
-        "groq_llm", GroqLLMSettings, GroqLLMSettings()
-    )
-    gemini_llm = await settings_repo.get_or_default(
-        "gemini_llm", GeminiLLMSettings, GeminiLLMSettings()
-    )
-    gemini_tts = await settings_repo.get_or_default(
-        "gemini_tts", GeminiTTSSettings, GeminiTTSSettings()
-    )
     prompts = await settings_repo.get_or_default("prompts", PromptSettings, PromptSettings())
+
+    providers = await load_provider_settings(settings_repo, state.env)
+    provider_forms, piper_voices = await _build_provider_forms(
+        state, settings_repo, providers
+    )
 
     # Get available providers from environment (only configured + implemented)
     available_llm = state.env.get_available_llm_providers()
     available_tts = state.env.get_available_tts_providers()
 
-    # Group voices by language for the UI
-    voices_by_lang: dict[str, list[dict[str, str]]] = {}
-    for voice in DEFAULT_VOICES:
-        if voice.language not in voices_by_lang:
-            voices_by_lang[voice.language] = []
-        voices_by_lang[voice.language].append({
-            "id": voice.id,
-            "name": voice.name,
-        })
+    # Group the Piper catalogue by language for the per-language override tab
+    voices_by_lang: dict[str, list[Voice]] = {}
+    for voice in piper_voices:
+        voices_by_lang.setdefault(voice.language, []).append(voice)
 
     # Get currently selected voice for each language (user override or default)
     selected_voices: dict[str, str] = {}
     for lang_code in LanguageCode:
-        if tts_voice and lang_code in tts_voice.voice_overrides:
+        if lang_code in tts_voice.voice_overrides:
             selected_voices[lang_code.value] = tts_voice.voice_overrides[lang_code]
         elif lang_code in LANGUAGE_DEFAULT_VOICES:
             selected_voices[lang_code.value] = LANGUAGE_DEFAULT_VOICES[lang_code]
@@ -121,7 +317,6 @@ async def settings_page(
             "overlay": overlay,
             "reward": reward,
             "tts_voice": tts_voice,
-            "piper": piper,
             "language_codes": list(LanguageCode),
             "narrator_styles": list(NarratorStyle),
             "available_llm": available_llm,
@@ -129,17 +324,8 @@ async def settings_page(
             "voices_by_lang": voices_by_lang,
             "selected_voices": selected_voices,
             "providers": providers,
-            "groq_llm": groq_llm,
-            "gemini_llm": gemini_llm,
-            "gemini_tts": gemini_tts,
+            "provider_forms": provider_forms,
             "prompts": prompts,
-            "groq_models": GroqLLMProvider.AVAILABLE_MODELS,
-            "gemini_models": GeminiLLMProvider.AVAILABLE_MODELS,
-            "gemini_tts_models": GeminiTTSProvider.AVAILABLE_MODELS,
-            "gemini_voices": GEMINI_VOICES,
-            "safety_thresholds": list(GeminiSafetyThreshold),
-            "active_tts_is_piper": providers.tts is TTSProviderName.PIPER,
-            "worker_running": state.worker is not None and state.worker.is_running,
         },
     )
 
@@ -320,25 +506,33 @@ async def save_tts_voice_settings(
     )
 
 
-@router.post("/settings/tts_provider", response_class=HTMLResponse)
-async def save_tts_provider_settings(
+TEST_PHRASE = "Greetings, adventurer. Your voice settings have been configured."
+
+
+@router.post("/settings/providers/piper", response_class=HTMLResponse)
+async def save_piper_settings(
     request: Request,
     state: AppStateDep,
     settings_repo: SettingsRepoDep,
 ) -> Response:
-    """Save Piper synthesis settings (speed, variation).
+    """Save Piper synthesis settings.
 
     Persists the values and applies them to the running provider when Piper is
-    the active TTS provider. When another provider is active the values are
-    still stored - they take effect the next time Piper is selected.
+    active, which avoids reloading the voice model for a slider change. When
+    another provider is active the values are still stored - they take effect
+    the next time Piper is selected.
     """
     form_data = await request.form()
 
-    settings = PiperSettings(
-        length_scale=float(str(form_data["length_scale"])),
-        noise_scale=float(str(form_data["noise_scale"])),
-        noise_w=float(str(form_data.get("noise_w", 0.8))),
-    )
+    try:
+        settings = PiperSettings(
+            voice=str(form_data["voice"]),
+            length_scale=float(str(form_data["length_scale"])),
+            noise_scale=float(str(form_data["noise_scale"])),
+            noise_w=float(str(form_data["noise_w"])),
+        )
+    except (ValidationError, ValueError) as e:
+        return _invalid_settings_toast(e)
 
     await settings_repo.set("piper", settings)
 
@@ -359,37 +553,84 @@ async def save_tts_provider_settings(
     )
 
 
-@router.post("/settings/tts_provider/test", response_class=HTMLResponse)
-async def test_tts_provider(
+def _preview_tts_provider(
+    state: AppState,
+    selection: ProviderSettings,
+    form_data: FormData,
+    voice_overrides: TTSVoiceSettings,
+) -> TTSProvider:
+    """Build a throwaway TTS provider from the values currently in the form.
+
+    Auditioning has to use the submitted settings rather than the stored ones,
+    otherwise the button previews whatever was saved last. A separate instance
+    is used so an in-flight narration keeps the settings it started with.
+
+    Args:
+        state: Application state, for the environment.
+        selection: The active provider selection.
+        form_data: Submitted settings form.
+        voice_overrides: Stored per-language Piper voices.
+
+    Returns:
+        A provider built from the submitted values. The caller must close it.
+
+    Raises:
+        ValidationError: If a submitted value is out of range.
+        ValueError: If a submitted voice name is not valid for the provider.
+        ProviderConfigurationError: If the provider's API key is missing.
+    """
+    piper_settings = PiperSettings(
+        voice=str(form_data.get("voice", PiperSettings().voice)),
+        length_scale=float(str(form_data.get("length_scale", PiperSettings().length_scale))),
+        noise_scale=float(str(form_data.get("noise_scale", PiperSettings().noise_scale))),
+        noise_w=float(str(form_data.get("noise_w", PiperSettings().noise_w))),
+    )
+    gemini_settings = GeminiTTSSettings(
+        model=str(form_data.get("model", GeminiTTSSettings().model)),
+        voice_name=str(form_data.get("voice_name", GeminiTTSSettings().voice_name)),
+        style_prompt=str(form_data.get("style_prompt", GeminiTTSSettings().style_prompt)),
+        temperature=float(str(form_data.get("temperature", GeminiTTSSettings().temperature))),
+    )
+
+    return build_tts_provider(
+        env=state.env,
+        provider=selection.tts,
+        piper_settings=piper_settings,
+        piper_voice_settings=voice_overrides,
+        gemini_settings=gemini_settings,
+    )
+
+
+@router.post("/settings/providers/test_voice", response_class=HTMLResponse)
+async def test_voice(
     request: Request,
     state: AppStateDep,
+    settings_repo: SettingsRepoDep,
     templates: TemplatesDep,
 ) -> HTMLResponse:
-    """Synthesize a test phrase with the active TTS provider.
+    """Synthesize a test phrase with the settings currently in the form.
 
-    For Piper the un-saved form values are applied for the duration of the test
-    and then restored, so the sliders can be auditioned before saving. Other
-    providers are tested with their currently saved settings.
+    Works the same way for every TTS provider: the submitted values are used
+    as-is, so the operator hears what they are about to save.
     """
     form_data = await request.form()
+    selection = await load_provider_settings(settings_repo, state.env)
+    voice_overrides = await settings_repo.get_or_default(
+        "tts_voice", TTSVoiceSettings, TTSVoiceSettings()
+    )
 
-    if not state.pipeline:
+    try:
+        provider = _preview_tts_provider(state, selection, form_data, voice_overrides)
+    except (ValidationError, ValueError, ProviderConfigurationError) as e:
         return templates.TemplateResponse(
             request,
             "partials/tts_test_result.html",
-            {"success": False, "error": "Pipeline not initialized"},
+            {"success": False, "error": str(e)},
         )
 
-    tts = state.pipeline.tts_provider
-    test_text = "Greetings, adventurer. Your voice settings have been configured."
-    restore: tuple[float, float, float] | None = None
-
     try:
-        if isinstance(tts, PiperTTSProvider):
-            saved = await _apply_piper_form_settings(tts, form_data)
-            restore = saved
-
-        audio_data = await tts.synthesize(test_text)
+        await provider.start()
+        audio_data = await provider.synthesize(TEST_PHRASE)
     except (ValueError, RuntimeError, NotImplementedError, OSError) as e:
         return templates.TemplateResponse(
             request,
@@ -403,47 +644,40 @@ async def test_tts_provider(
             {"success": False, "error": f"Gemini API error {e.code}: {e.message}"},
         )
     finally:
-        if restore is not None and isinstance(tts, PiperTTSProvider):
-            tts.update_settings(
-                length_scale=restore[0],
-                noise_scale=restore[1],
-                noise_w=restore[2],
-            )
-
-    audio_b64 = base64.b64encode(audio_data).decode()
+        await provider.close()
 
     return templates.TemplateResponse(
         request,
         "partials/tts_test_result.html",
-        {"success": True, "audio_data": audio_b64},
+        {"success": True, "audio_data": base64.b64encode(audio_data).decode()},
     )
-
-
-async def _apply_piper_form_settings(
-    tts: PiperTTSProvider,
-    form_data: FormData,
-) -> tuple[float, float, float]:
-    """Apply un-saved Piper slider values for a test synthesis.
-
-    Args:
-        tts: The running Piper provider.
-        form_data: Submitted settings form.
-
-    Returns:
-        The previous (length_scale, noise_scale, noise_w) so the caller can restore them.
-    """
-    previous = tts.current_settings()
-
-    tts.update_settings(
-        length_scale=float(str(form_data.get("length_scale", previous[0]))),
-        noise_scale=float(str(form_data.get("noise_scale", previous[1]))),
-        noise_w=float(str(form_data.get("noise_w", previous[2]))),
-    )
-
-    return previous
 
 
 # === Provider selection ===
+
+
+def _invalid_settings_toast(error: ValidationError | ValueError) -> Response:
+    """Report a rejected settings value inline.
+
+    Bounds come from the provider's own schema, so the browser blocks most bad
+    input; anything that still arrives is operator error, not a server fault.
+
+    Args:
+        error: The validation failure.
+
+    Returns:
+        HTMX toast response naming the offending field.
+    """
+    detail = (
+        _first_validation_message(error)
+        if isinstance(error, ValidationError)
+        else str(error)
+    )
+    message = f"Not saved - {detail}"
+    return Response(
+        content=f"<div class='toast error'>{message}</div>",
+        headers=_toast_response(message, success=False),
+    )
 
 
 @router.post("/settings/providers", response_class=HTMLResponse)
@@ -455,10 +689,13 @@ async def save_provider_selection(
     """Switch the active LLM and TTS providers and rebuild the pipeline."""
     form_data = await request.form()
 
-    settings = ProviderSettings(
-        llm=LLMProviderName(str(form_data["llm"])),
-        tts=TTSProviderName(str(form_data["tts"])),
-    )
+    try:
+        settings = ProviderSettings(
+            llm=LLMProviderName(str(form_data["llm"])),
+            tts=TTSProviderName(str(form_data["tts"])),
+        )
+    except (ValidationError, ValueError) as e:
+        return _invalid_settings_toast(e)
 
     await settings_repo.set("providers", settings)
 
@@ -477,11 +714,14 @@ async def save_groq_llm_settings(
     """Save Groq model parameters, rebuilding the pipeline if Groq is active."""
     form_data = await request.form()
 
-    settings = GroqLLMSettings(
-        model=str(form_data["model"]),
-        temperature=float(str(form_data["temperature"])),
-        max_tokens=int(str(form_data["max_tokens"])),
-    )
+    try:
+        settings = GroqLLMSettings(
+            model=str(form_data["model"]),
+            temperature=float(str(form_data["temperature"])),
+            max_tokens=int(str(form_data["max_tokens"])),
+        )
+    except (ValidationError, ValueError) as e:
+        return _invalid_settings_toast(e)
 
     await settings_repo.set("groq_llm", settings)
 
@@ -505,15 +745,17 @@ async def save_gemini_llm_settings(
     form_data = await request.form()
 
     raw_budget = str(form_data.get("thinking_budget", "")).strip()
-    thinking_budget = int(raw_budget) if raw_budget else None
 
-    settings = GeminiLLMSettings(
-        model=str(form_data["model"]),
-        temperature=float(str(form_data["temperature"])),
-        max_output_tokens=int(str(form_data["max_output_tokens"])),
-        thinking_budget=thinking_budget,
-        safety_threshold=GeminiSafetyThreshold(str(form_data["safety_threshold"])),
-    )
+    try:
+        settings = GeminiLLMSettings(
+            model=str(form_data["model"]),
+            temperature=float(str(form_data["temperature"])),
+            max_output_tokens=int(str(form_data["max_output_tokens"])),
+            thinking_budget=int(raw_budget) if raw_budget else None,
+            safety_threshold=GeminiSafetyThreshold(str(form_data["safety_threshold"])),
+        )
+    except (ValidationError, ValueError) as e:
+        return _invalid_settings_toast(e)
 
     await settings_repo.set("gemini_llm", settings)
 
@@ -538,12 +780,15 @@ async def save_gemini_tts_settings(
     """Save Gemini TTS parameters, rebuilding the pipeline if Gemini TTS is active."""
     form_data = await request.form()
 
-    settings = GeminiTTSSettings(
-        model=str(form_data["model"]),
-        voice_name=str(form_data["voice_name"]),
-        style_prompt=str(form_data.get("style_prompt", "")),
-        temperature=float(str(form_data["temperature"])),
-    )
+    try:
+        settings = GeminiTTSSettings(
+            model=str(form_data["model"]),
+            voice_name=str(form_data["voice_name"]),
+            style_prompt=str(form_data.get("style_prompt", "")),
+            temperature=float(str(form_data["temperature"])),
+        )
+    except (ValidationError, ValueError) as e:
+        return _invalid_settings_toast(e)
 
     await settings_repo.set("gemini_tts", settings)
 

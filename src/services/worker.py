@@ -17,7 +17,12 @@ from src.api.websocket import WebSocketManager
 from src.db.repositories.narration_log import NarrationLogRepository
 from src.db.repositories.settings import SettingsRepository
 from src.models.narration import LanguageCode, NarrationRequest, NarrationResult
-from src.models.settings import LanguageSettings, NarratorSettings, TTSVoiceSettings
+from src.models.settings import (
+    LanguageSettings,
+    NarratorSettings,
+    TTSProviderName,
+    TTSVoiceSettings,
+)
 from src.providers.llm.prompts import PromptSettings
 from src.services.pipeline import ModerationRejectedError, NarrationPipeline
 from src.services.queue import NarrationQueue, QueueItem
@@ -198,12 +203,13 @@ class QueueWorker:
                     narrator_lang = language_settings.narrator_lang
                     subtitle_lang = language_settings.subtitle_lang
 
-                # Load TTS voice settings for per-language voice overrides
-                tts_voice_settings = await settings_repo.get(
-                    "tts_voice", TTSVoiceSettings, TTSVoiceSettings()
-                )
-                if tts_voice_settings:
-                    # Get voice override for narrator language (if set)
+                # Per-language overrides hold Piper voice IDs, so they only
+                # apply while Piper is synthesizing. Handing "en_US-amy-medium"
+                # to Gemini TTS would fail every narration in that language.
+                if self._pipeline.tts_provider_name == TTSProviderName.PIPER.value:
+                    tts_voice_settings = await settings_repo.get_or_default(
+                        "tts_voice", TTSVoiceSettings, TTSVoiceSettings()
+                    )
                     voice_id = tts_voice_settings.voice_overrides.get(narrator_lang)
 
             # Create narration request

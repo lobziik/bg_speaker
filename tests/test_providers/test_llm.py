@@ -24,12 +24,10 @@ class TestLLMProviderProtocol:
             id="test-model",
             name="Test Model",
             context_length=4096,
-            supports_streaming=True,
         )
         assert model.id == "test-model"
         assert model.name == "Test Model"
         assert model.context_length == 4096
-        assert model.supports_streaming is True
 
     def test_llm_response_dataclass(self) -> None:
         """Test LLMResponse dataclass."""

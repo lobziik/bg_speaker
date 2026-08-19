@@ -103,6 +103,29 @@ arm64 with a `narrator` installer CLI.
   `install`, `start`, `stop`, `restart`, `logs [app|caddy|init]`, `status`,
   `upgrade`.
 
+### 7. Making the Provider Protocol Load-Bearing
+
+Half the provider protocol had no caller. Rather than keep it as decoration, the
+usable parts were wired up and the rest removed.
+
+- [x] `src/views/schema_form.py` parses a provider's JSON Schema into typed
+  `SettingsField` objects; `partials/settings_field.html` renders them. The three
+  hand-written provider forms are gone, and `get_settings_schema()` is now what
+  actually draws the UI.
+- [x] `list_models()` and `list_voices()` fill the dropdowns, including the
+  per-language Piper voice pickers, so a catalogue has one source of truth.
+- [x] Piper's synthesis settings moved to the Providers tab next to every other
+  provider's; the TTS Voice tab is now only language-to-voice mapping. `noise_w`
+  is editable instead of being a hidden input.
+- [x] The voice preview builds a throwaway provider from the submitted form for
+  *both* providers. It used to mutate the live Piper instance and restore it
+  afterwards, and ignored the form entirely for Gemini.
+- [x] Removed with no honest use: `generate_stream()`, `synthesize_stream()`,
+  `clone_voice()`, `supports_streaming`, `supports_cloning` and
+  `Model.supports_streaming`.
+- [x] Provider settings routes report validation failures as toasts; an
+  out-of-range value used to raise a 500.
+
 ## Bugs Found and Fixed Along the Way
 
 - `NarratorSettings.system_prompt` was never reaching the LLM: the pipeline's
@@ -121,11 +144,19 @@ arm64 with a `narrator` installer CLI.
 - `EnvSettings.get_available_llm_providers()` advertised openai/anthropic/
   openrouter/ollama, none of which are implemented; selecting one would have
   broken the factory. It now reports only what can actually be built.
+- A per-language Piper voice override was passed to whichever TTS provider was
+  active. After switching to Gemini TTS, every narration in that language failed
+  `_validate_voice` and refunded the viewer's points. The worker now applies the
+  overrides only while Piper is synthesizing. (Found by review.)
+- `build_providers()` left the LLM provider's HTTP pool open when the TTS
+  provider failed to build, leaking one pool per retry from the settings form.
+  (Found by review.)
 
 ## Verification
 
-- 230 tests pass (83 new: Gemini LLM, Gemini TTS, factory, worker pipeline swap,
-  database migrations, prompt templates, settings repository).
+- 244 tests pass (97 new: Gemini LLM, Gemini TTS, factory, worker pipeline swap,
+  database migrations, prompt templates, settings repository, schema-driven form
+  rendering, and a regression test for the voice-override scoping bug).
 - `ruff check .`, `mypy .` and `ty check .` all clean.
 - Container built for `linux/arm64` with podman and booted end to end: systemd
   units active, migrations applied, worker started on the env-derived provider,

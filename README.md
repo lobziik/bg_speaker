@@ -120,6 +120,12 @@ database, so a provider is only selectable once its key is present.
 | TTS | `piper` | Local, CPU-only, no key; per-language voices, speed and variation sliders |
 | TTS | `gemini` | 30 multilingual voices, needs `GEMINI_API_KEY` |
 
+Each provider's settings form is generated from the provider itself: the model and
+voice dropdowns come from its catalogue, and the remaining controls from the JSON
+Schema it publishes. Adding a provider adds its form automatically. The **TTS
+Voice** tab is only about mapping languages to Piper voices; everything else about
+a provider lives with that provider on the Providers tab.
+
 Gemini specifics:
 
 - **Structured output**: narration and moderation both use response schemas, so

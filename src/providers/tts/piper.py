@@ -4,7 +4,6 @@ import asyncio
 import io
 import sys
 import wave
-from collections.abc import AsyncIterator
 from pathlib import Path
 from urllib.request import urlopen
 
@@ -319,16 +318,6 @@ class PiperTTSProvider:
         """Provider display name."""
         return "piper"
 
-    @property
-    def supports_streaming(self) -> bool:
-        """Piper generates full audio at once."""
-        return False
-
-    @property
-    def supports_cloning(self) -> bool:
-        """Piper doesn't support voice cloning."""
-        return False
-
     def _on_voice_evicted(self, voice_id: str, _voice: object) -> None:
         """Callback when voice model is evicted from cache.
 
@@ -412,21 +401,6 @@ class PiperTTSProvider:
             length_scale=self._settings.length_scale,
             noise_scale=self._settings.noise_scale,
             noise_w=self._settings.noise_w,
-        )
-
-    def current_settings(self) -> tuple[float, float, float]:
-        """Return the synthesis knobs currently in effect.
-
-        Lets callers (such as the settings preview) audition new values and
-        restore the previous ones without reaching into private state.
-
-        Returns:
-            Tuple of (length_scale, noise_scale, noise_w).
-        """
-        return (
-            self._settings.length_scale,
-            self._settings.noise_scale,
-            self._settings.noise_w,
         )
 
     def get_voice_for_language(self, lang: LanguageCode) -> str:
@@ -646,30 +620,9 @@ class PiperTTSProvider:
 
         return buffer.getvalue()
 
-    async def synthesize_stream(
-        self,
-        text: str,
-        voice_id: str | None = None,
-        settings: TTSSettings | None = None,
-        language: LanguageCode | None = None,
-    ) -> AsyncIterator[bytes]:
-        """Streaming not supported - yields full audio."""
-        audio = await self.synthesize(text, voice_id, settings, language)
-        yield audio
-
     async def list_voices(self) -> list[Voice]:
         """List recommended Piper voices."""
         return DEFAULT_VOICES.copy()
-
-    async def clone_voice(
-        self,
-        name: str,
-        audio_files: list[bytes],
-    ) -> Voice:
-        """Voice cloning not supported by Piper."""
-        raise NotImplementedError(
-            "Piper does not support voice cloning. Use ElevenLabs provider for voice cloning."
-        )
 
     async def health_check(self) -> bool:
         """Check if Piper is available."""
@@ -708,6 +661,14 @@ class PiperTTSProvider:
                     "title": "Variation",
                     "description": "Pronunciation variation (0=monotone, 1=varied)",
                     "default": 0.667,
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                },
+                "noise_w": {
+                    "type": "number",
+                    "title": "Phoneme Duration Variation",
+                    "description": "Rhythm variation (0=consistent, 1=varied)",
+                    "default": 0.8,
                     "minimum": 0.0,
                     "maximum": 1.0,
                 },

@@ -221,13 +221,20 @@ async def build_providers(
         groq_settings=groq_settings,
         gemini_settings=gemini_llm_settings,
     )
-    tts_provider = build_tts_provider(
-        env=env,
-        provider=selection.tts,
-        piper_settings=piper_settings,
-        piper_voice_settings=piper_voice_settings,
-        gemini_settings=gemini_tts_settings,
-    )
+    # The LLM provider opened an HTTP pool in its constructor. If the TTS
+    # provider cannot be built - a missing key, a stale voice name - that pool
+    # would leak on every retry from the settings form.
+    try:
+        tts_provider = build_tts_provider(
+            env=env,
+            provider=selection.tts,
+            piper_settings=piper_settings,
+            piper_voice_settings=piper_voice_settings,
+            gemini_settings=gemini_tts_settings,
+        )
+    except BaseException:
+        await llm_provider.close()
+        raise
 
     logger.info(
         "providers_built",

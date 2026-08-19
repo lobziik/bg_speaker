@@ -1,0 +1,36 @@
+{# Renders one control described by a provider's settings schema.
+   `prefix` keeps element ids unique when several providers expose a field
+   with the same name (for example "model"). #}
+{% macro render_field(field, prefix) %}
+{% set field_id = prefix ~ "_" ~ field.name %}
+<div class="form-group">
+    <label for="{{ field_id }}">{{ field.title }}</label>
+
+    {% if field.kind == "select" %}
+    <select name="{{ field.name }}" id="{{ field_id }}">
+        {% for option in field.options %}
+        <option value="{{ option.value }}" {% if field.value == option.value %}selected{% endif %}>
+            {{ option.label }}
+        </option>
+        {% endfor %}
+    </select>
+
+    {% elif field.kind == "number" %}
+    <input type="number" name="{{ field.name }}" id="{{ field_id }}"
+           value="{{ field.value }}" step="{{ field.step }}"
+           {% if field.minimum is not none %}min="{{ field.minimum }}"{% endif %}
+           {% if field.maximum is not none %}max="{{ field.maximum }}"{% endif %}
+           {% if not field.optional %}required{% endif %}>
+
+    {% elif field.kind == "textarea" %}
+    <textarea name="{{ field.name }}" id="{{ field_id }}" rows="3">{{ field.value }}</textarea>
+
+    {% else %}
+    <input type="text" name="{{ field.name }}" id="{{ field_id }}" value="{{ field.value }}">
+    {% endif %}
+
+    {% if field.description %}
+    <small class="help-text">{{ field.description }}</small>
+    {% endif %}
+</div>
+{% endmacro %}
