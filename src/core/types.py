@@ -19,18 +19,3 @@ class StrictModel(BaseModel):
         extra="forbid",
         validate_default=True,
     )
-
-
-class MutableStrictModel(BaseModel):
-    """Mutable version of StrictModel for settings that need updates.
-
-    Use this for models that need to be modified after creation,
-    such as runtime settings or builder patterns.
-    """
-
-    model_config = ConfigDict(
-        strict=True,
-        frozen=False,
-        extra="forbid",
-        validate_default=True,
-    )

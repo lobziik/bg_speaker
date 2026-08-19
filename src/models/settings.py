@@ -8,14 +8,6 @@ from pydantic import Field, field_validator
 from src.core.types import StrictModel
 from src.models.narration import LanguageCode, NarratorStyle
 
-
-class ProviderType(StrEnum):
-    """Types of providers available."""
-
-    LLM = "llm"
-    TTS = "tts"
-
-
 # === Global Settings ===
 
 
@@ -133,17 +125,6 @@ class TTSVoiceSettings(StrictModel):
         return {
             LanguageCode(k) if isinstance(k, str) else k: v for k, v in value.items()
         }
-
-
-class AppSettings(StrictModel):
-    """Root settings object combining all settings."""
-
-    language: LanguageSettings = Field(default_factory=LanguageSettings)
-    narrator: NarratorSettings = Field(default_factory=NarratorSettings)
-    queue: QueueSettings = Field(default_factory=QueueSettings)
-    overlay: OverlaySettings = Field(default_factory=OverlaySettings)
-    reward: TwitchRewardSettings = Field(default_factory=TwitchRewardSettings)
-    tts_voice: TTSVoiceSettings = Field(default_factory=TTSVoiceSettings)
 
 
 # === Provider Settings ===

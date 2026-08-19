@@ -49,7 +49,6 @@ WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
 COPY src ./src
-COPY config ./config
 COPY migrations ./migrations
 COPY overlay ./overlay
 
@@ -60,7 +59,7 @@ COPY container/templates/Caddyfile.template /etc/caddy/
 # COPY preserves the host's file modes, which are not guaranteed to be
 # world-readable; the app service runs as `narrator` and must be able to read
 # its own code. Normalise instead of trusting the build host's umask.
-RUN chmod -R a+rX /app/src /app/config /app/migrations /app/overlay && \
+RUN chmod -R a+rX /app/src /app/migrations /app/overlay && \
     chmod +x /usr/local/bin/narrator-*.sh && \
     mkdir -p /etc/narrator /var/lib/narrator/data /var/lib/caddy && \
     chown -R narrator:narrator /var/lib/narrator
