@@ -232,9 +232,7 @@ class GlobalCooldownManager:
                     # Continue anyway - reward might already be paused
 
             self._is_active = True
-            self._cooldown_ends_at = datetime.now(UTC) + timedelta(
-                seconds=duration_seconds
-            )
+            self._cooldown_ends_at = datetime.now(UTC) + timedelta(seconds=duration_seconds)
 
             # Persist state for restart recovery
             await self._save_state()
@@ -256,9 +254,7 @@ class GlobalCooldownManager:
                     )
 
             # Schedule unpause task
-            self._unpause_task = asyncio.create_task(
-                self._unpause_after_delay(duration_seconds)
-            )
+            self._unpause_task = asyncio.create_task(self._unpause_after_delay(duration_seconds))
 
     async def _unpause_after_delay(self, seconds: float) -> None:
         """Wait then unpause the reward.

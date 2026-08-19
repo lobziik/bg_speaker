@@ -16,7 +16,6 @@ from src.core.types import StrictModel
 from src.providers.tts.base import TTSProvider, TTSSettings, Voice
 
 if TYPE_CHECKING:
-
     from src.models.narration import LanguageCode
 
 logger = structlog.get_logger()

@@ -122,9 +122,7 @@ class TTSVoiceSettings(StrictModel):
         """Convert string keys to LanguageCode enum for JSON deserialization."""
         if not isinstance(value, dict):
             return value  # ty: ignore[invalid-return-type]
-        return {
-            LanguageCode(k) if isinstance(k, str) else k: v for k, v in value.items()
-        }
+        return {LanguageCode(k) if isinstance(k, str) else k: v for k, v in value.items()}
 
 
 # === Provider Settings ===
@@ -174,9 +172,7 @@ class ProviderSettings(StrictModel):
 
     @field_validator("llm", mode="before")
     @classmethod
-    def convert_string_to_llm_provider(
-        cls, value: str | LLMProviderName
-    ) -> LLMProviderName:
+    def convert_string_to_llm_provider(cls, value: str | LLMProviderName) -> LLMProviderName:
         """Convert string to LLMProviderName enum for JSON deserialization."""
         if isinstance(value, str):
             return LLMProviderName(value)
@@ -184,9 +180,7 @@ class ProviderSettings(StrictModel):
 
     @field_validator("tts", mode="before")
     @classmethod
-    def convert_string_to_tts_provider(
-        cls, value: str | TTSProviderName
-    ) -> TTSProviderName:
+    def convert_string_to_tts_provider(cls, value: str | TTSProviderName) -> TTSProviderName:
         """Convert string to TTSProviderName enum for JSON deserialization."""
         if isinstance(value, str):
             return TTSProviderName(value)

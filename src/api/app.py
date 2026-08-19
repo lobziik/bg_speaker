@@ -174,9 +174,7 @@ def create_app() -> FastAPI:
     app.include_router(twitch.router, prefix="/auth", tags=["Twitch OAuth"])
 
     # Protected API routes
-    app.include_router(
-        test.router, prefix="/api", tags=["Test"], dependencies=auth_dependency
-    )
+    app.include_router(test.router, prefix="/api", tags=["Test"], dependencies=auth_dependency)
 
     # Include view routers (Web UI) - all protected
     from src.views import dashboard, logs, queue, settings

@@ -170,9 +170,7 @@ class TestPiperLanguageVoiceSelection:
 
     def test_get_voice_for_language_uses_override(self) -> None:
         """Should prefer user override over default."""
-        provider = PiperTTSProvider(
-            voice_overrides={LanguageCode.EN: "en_GB-alba-medium"}
-        )
+        provider = PiperTTSProvider(voice_overrides={LanguageCode.EN: "en_GB-alba-medium"})
 
         # EN should use override
         assert provider.get_voice_for_language(LanguageCode.EN) == "en_GB-alba-medium"
@@ -246,9 +244,7 @@ class TestPiperLanguageVoiceSelection:
     @pytest.mark.asyncio
     async def test_synthesize_with_language_and_override(self) -> None:
         """Test synthesis uses override when language specified."""
-        provider = PiperTTSProvider(
-            voice_overrides={LanguageCode.RU: "ru_RU-irina-medium"}
-        )
+        provider = PiperTTSProvider(voice_overrides={LanguageCode.RU: "ru_RU-irina-medium"})
 
         mock_voice = MagicMock()
         mock_voice.config.sample_rate = 22050
@@ -294,11 +290,7 @@ class TestPiperLanguageVoiceSelection:
 
         with patch("piper.PiperVoice"), patch("piper.config.SynthesisConfig"):
             # Specify both voice_id and language - voice_id should win
-            await provider.synthesize(
-                "Test",
-                voice_id="custom-voice",
-                language=LanguageCode.RU
-            )
+            await provider.synthesize("Test", voice_id="custom-voice", language=LanguageCode.RU)
 
         assert "custom-voice" in loaded_voice_ids
         assert "ru_RU-ruslan-medium" not in loaded_voice_ids

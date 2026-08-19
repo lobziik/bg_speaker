@@ -135,9 +135,7 @@ async def rate_limit_status_partial(
 ) -> HTMLResponse:
     """Get rate limit status partial for HTMX polling."""
     rate_status = state.rate_limiter.get_status()
-    global_cooldown_status = (
-        state.global_cooldown.get_status() if state.global_cooldown else None
-    )
+    global_cooldown_status = state.global_cooldown.get_status() if state.global_cooldown else None
 
     return templates.TemplateResponse(
         request,

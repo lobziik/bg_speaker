@@ -102,10 +102,12 @@ class TestGroqLLMProvider:
         # Mock the Groq client response with JSON format
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "voice_text": "The hero speaks with valor!",
-            "subtitle_text": "The hero speaks with valor!",
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "voice_text": "The hero speaks with valor!",
+                "subtitle_text": "The hero speaks with valor!",
+            }
+        )
 
         with patch.object(
             provider._client.chat.completions, "create", new_callable=AsyncMock
@@ -138,10 +140,12 @@ class TestGroqLLMProvider:
 
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = json.dumps({
-            "voice_text": "A whisper in the dark...",
-            "subtitle_text": "A whisper in the dark...",
-        })
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "voice_text": "A whisper in the dark...",
+                "subtitle_text": "A whisper in the dark...",
+            }
+        )
 
         with patch.object(
             provider._client.chat.completions, "create", new_callable=AsyncMock

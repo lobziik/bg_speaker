@@ -224,9 +224,7 @@ class TwitchAuthService:
             )
 
             if response.status_code == 400:
-                raise TokenExpiredError(
-                    "Refresh token expired. User must re-authorize."
-                )
+                raise TokenExpiredError("Refresh token expired. User must re-authorize.")
 
             response.raise_for_status()
             token_data: TokenResponse = response.json()

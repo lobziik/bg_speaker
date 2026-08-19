@@ -21,7 +21,7 @@ logger = structlog.get_logger()
 # Users can override these via TTSVoiceSettings.
 LANGUAGE_DEFAULT_VOICES: dict[LanguageCode, str] = {
     LanguageCode.EN: "en_US-lessac-medium",
-    LanguageCode.RU: "ru_RU-ruslan-medium"
+    LanguageCode.RU: "ru_RU-ruslan-medium",
 }
 
 
@@ -66,8 +66,7 @@ def parse_voice_name(voice: str) -> dict[str, str]:
 
     if "_" not in lang_code:
         raise ValueError(
-            f"Invalid language code format: '{lang_code}'. Expected format: 'xx_XX' "
-            f"(e.g., 'en_US')"
+            f"Invalid language code format: '{lang_code}'. Expected format: 'xx_XX' (e.g., 'en_US')"
         )
 
     lang_family = lang_code.split("_")[0]  # e.g., "en"
@@ -257,7 +256,7 @@ DEFAULT_VOICES = [
         name="Irina (Russian)",
         language="ru",
         preview_url="https://rhasspy.github.io/piper-samples/samples/ru/ru_RU/irina/medium/sample.mp3",
-    )
+    ),
 ]
 
 

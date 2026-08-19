@@ -320,9 +320,7 @@ class TTLCache[T]:
             # Find oldest entry age for logging
             oldest_age: float | None = None
             if self._entries:
-                oldest_age = max(
-                    now - entry.last_accessed for entry in self._entries.values()
-                )
+                oldest_age = max(now - entry.last_accessed for entry in self._entries.values())
 
             # Find expired entries
             expired_keys: list[str] = []

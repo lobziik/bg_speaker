@@ -19,7 +19,6 @@ from src.providers.llm.base import (
 )
 
 if TYPE_CHECKING:
-
     from groq.types.chat import (
         ChatCompletionSystemMessageParam,
         ChatCompletionUserMessageParam,
@@ -335,9 +334,7 @@ class GroqLLMProvider:
                 raw_response=raw_response,
                 error=str(e),
             )
-            raise LLMResponseParseError(
-                raw_response, f"Invalid moderation JSON: {e}"
-            ) from e
+            raise LLMResponseParseError(raw_response, f"Invalid moderation JSON: {e}") from e
         except ValidationError as e:
             logger.error(
                 "llm_moderate_validation_error",
@@ -345,9 +342,7 @@ class GroqLLMProvider:
                 raw_response=raw_response,
                 error=str(e),
             )
-            raise LLMResponseParseError(
-                raw_response, f"Invalid moderation response: {e}"
-            ) from e
+            raise LLMResponseParseError(raw_response, f"Invalid moderation response: {e}") from e
 
         logger.info(
             "llm_moderate_complete",

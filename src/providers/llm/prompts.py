@@ -71,12 +71,10 @@ DEFAULT_STYLE_WHISPER_PROMPT = (
     "The words should feel intimate and conspiratorial."
 )
 DEFAULT_STYLE_PROCLAIM_PROMPT = (
-    "Announce with grand, theatrical proclamation! "
-    "Let your words ring out with heroic grandeur!"
+    "Announce with grand, theatrical proclamation! Let your words ring out with heroic grandeur!"
 )
 DEFAULT_STYLE_MOCK_PROMPT = (
-    "Add a hint of playful mockery or sarcasm to the narration. "
-    "A wry smile colors every word."
+    "Add a hint of playful mockery or sarcasm to the narration. A wry smile colors every word."
 )
 
 DEFAULT_FORMATTING_PROMPT = """\
@@ -127,9 +125,7 @@ Fantasy violence, magic, monsters, and gaming terms are ALLOWED.
 The goal is to catch actual Twitch TOS violations, not sanitize creative gaming content.
 """
 
-DEFAULT_MODERATION_USER_PROMPT = (
-    "Evaluate this Twitch chat message from user '$user':\n\n$message"
-)
+DEFAULT_MODERATION_USER_PROMPT = "Evaluate this Twitch chat message from user '$user':\n\n$message"
 
 # Language name mapping for more natural prompt text
 LANGUAGE_NAMES: dict[LanguageCode, str] = {
@@ -138,12 +134,14 @@ LANGUAGE_NAMES: dict[LanguageCode, str] = {
 }
 
 # Placeholders each templated section may use, and which it cannot do without.
-LANGUAGE_DUAL_PLACEHOLDERS = frozenset({
-    "narrator_lang_name",
-    "narrator_lang_code",
-    "subtitle_lang_name",
-    "subtitle_lang_code",
-})
+LANGUAGE_DUAL_PLACEHOLDERS = frozenset(
+    {
+        "narrator_lang_name",
+        "narrator_lang_code",
+        "subtitle_lang_name",
+        "subtitle_lang_code",
+    }
+)
 LANGUAGE_DUAL_REQUIRED = frozenset({"narrator_lang_name", "subtitle_lang_name"})
 
 LANGUAGE_SINGLE_PLACEHOLDERS = frozenset({"narrator_lang_name", "narrator_lang_code"})
@@ -191,9 +189,7 @@ def validate_template(
 
     unknown = sorted(identifiers - allowed)
     if unknown:
-        raise ValueError(
-            f"{field}: unknown placeholder(s) {unknown}. Available: {sorted(allowed)}"
-        )
+        raise ValueError(f"{field}: unknown placeholder(s) {unknown}. Available: {sorted(allowed)}")
 
     missing = sorted(required - identifiers)
     if missing:
