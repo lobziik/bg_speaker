@@ -1,7 +1,7 @@
 [project]
 name = "narrator-bot"
 version = "0.1.0"
-description = "BG3 Twitch Narrator Bot - Reads chat in D&D narrator style with TTS"
+description = "Twitch Narrator Bot - Reads chat in a dramatic fantasy narrator style with TTS"
 readme = "README.md"
 license = "MIT"
 requires-python = "==3.12.*"

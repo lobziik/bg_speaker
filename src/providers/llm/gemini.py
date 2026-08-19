@@ -78,7 +78,7 @@ class GeminiLLMProvider:
     - Native structured output via response schemas (no JSON coaxing needed)
     - Configurable thinking budget - 0 keeps narration latency low
     - Tunable safety threshold, needed because default filters reject a lot of
-      ordinary D&D combat description
+      ordinary fantasy combat description
     - Shares GEMINI_API_KEY with the Gemini TTS provider
 
     Recommended model: gemini-2.5-flash

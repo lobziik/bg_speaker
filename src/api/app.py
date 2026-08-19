@@ -142,8 +142,8 @@ def create_app() -> FastAPI:
         Configured FastAPI application.
     """
     app = FastAPI(
-        title="BG3 Narrator Bot",
-        description="Twitch Channel Points narrator with D&D style TTS",
+        title="Narrator Bot",
+        description="Twitch Channel Points narrator with dramatic fantasy TTS",
         version="0.2.0",
         lifespan=lifespan,
     )

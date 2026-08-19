@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 4 adds a functional web UI for configuration and monitoring of the BG3 Narrator Bot. Built with FastAPI + Jinja2 and HTMX for interactivity without heavy JavaScript. Styled with a BG3-themed dark parchment design.
+Phase 4 adds a functional web UI for configuration and monitoring of the Narrator Bot. Built with FastAPI + Jinja2 and HTMX for interactivity without heavy JavaScript. Styled with a dark parchment design.
 
 **Deliverable:** Functional web dashboard with settings, queue management, testing, and logs
 
@@ -12,7 +12,7 @@ Phase 4 adds a functional web UI for configuration and monitoring of the BG3 Nar
 
 - [x] `src/static/js/htmx.min.js` - HTMX 2.0.4 bundled locally
 - [x] `src/static/js/app.js` - WebSocket integration for live updates
-- [x] `src/static/css/main.css` - BG3 theme:
+- [x] `src/static/css/main.css` - parchment theme:
   - Dark parchment background (`rgba(20, 15, 10, 0.98)`)
   - Gold accents (`#daa520`)
   - Parchment text (`#f4e4bc`)
@@ -31,7 +31,7 @@ Phase 4 adds a functional web UI for configuration and monitoring of the BG3 Nar
   - Header with connection status
   - Content area with flash messages
   - Toast notification container
-  - Google Fonts for BG3 styling
+  - Google Fonts for the fantasy styling
 
 ### 3. Dashboard Page (`/`)
 
@@ -183,7 +183,7 @@ Phase 4 adds a functional web UI for configuration and monitoring of the BG3 Nar
 src/
 ├── static/
 │   ├── css/
-│   │   ├── main.css              # BG3 theme
+│   │   ├── main.css              # parchment theme
 │   │   └── components.css        # Component styles
 │   └── js/
 │       ├── htmx.min.js           # HTMX 2.0.4

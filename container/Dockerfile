@@ -24,8 +24,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 # =============================================================================
 FROM registry.access.redhat.com/ubi10-init:latest
 
-LABEL org.opencontainers.image.title="bg-narrator" \
-      org.opencontainers.image.description="BG3 Twitch Narrator Bot - Channel Points TTS narrator" \
+LABEL org.opencontainers.image.title="narrator" \
+      org.opencontainers.image.description="Twitch Narrator Bot - Channel Points TTS narrator" \
       org.opencontainers.image.licenses="MIT"
 
 # gettext provides envsubst, used to render the Caddyfile at first boot.

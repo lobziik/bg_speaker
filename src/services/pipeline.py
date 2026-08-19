@@ -85,7 +85,7 @@ class NarrationPipeline:
 
     This is the core service that processes narration requests:
     1. Takes user input
-    2. Formats it using LLM (D&D narrator style) with JSON response
+    2. Formats it using LLM (fantasy narrator style) with JSON response
     3. Synthesizes speech using TTS
     4. Returns the result with audio data
     """

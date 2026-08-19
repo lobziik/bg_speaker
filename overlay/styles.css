@@ -1,4 +1,4 @@
-/* BG3 Narrator Overlay Styles */
+/* Narrator Overlay Styles */
 
 /* Reset and base */
 * {
@@ -42,7 +42,7 @@ body {
     visibility: visible;
 }
 
-/* Subtitle box - BG3 parchment style */
+/* Subtitle box - parchment style */
 #subtitle-box {
     background: linear-gradient(
         to bottom,

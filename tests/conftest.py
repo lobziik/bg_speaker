@@ -25,5 +25,5 @@ def sample_user() -> str:
 @pytest.fixture
 def sample_system_prompt() -> str:
     """Provide a sample system prompt for testing."""
-    return """You are a D&D narrator. Transform messages into dramatic prose.
+    return """You are a fantasy narrator. Transform messages into dramatic prose.
     Keep responses under 100 words. Refer to the user in third person."""

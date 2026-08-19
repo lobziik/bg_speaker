@@ -302,7 +302,7 @@ def run_server(
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="BG3 Narrator Bot - Twitch Channel Points narrator with D&D style TTS",
+        description="Narrator Bot - Twitch Channel Points narrator with dramatic fantasy TTS",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -398,7 +398,7 @@ def main() -> None:
     elif args.command == "test":
         env = get_env_settings()
         configure_logging(args.log_level, env.log_format)
-        print("BG3 Narrator Bot - Testing pipeline...")
+        print("Narrator Bot - Testing pipeline...")
         asyncio.run(
             run_pipeline(
                 message=args.message,

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 3 adds real-time communication via WebSocket for the OBS overlay. The overlay displays subtitles with BG3-themed styling and plays synthesized audio from the narration pipeline.
+Phase 3 adds real-time communication via WebSocket for the OBS overlay. The overlay displays subtitles with parchment-themed styling and plays synthesized audio from the narration pipeline.
 
 **Deliverable:** Working overlay in OBS with audio + subtitles
 
@@ -55,8 +55,8 @@ Phase 3 adds real-time communication via WebSocket for the OBS overlay. The over
 
 ### 5. OBS Overlay (`overlay/` directory)
 
-- [x] `index.html` - Main HTML page with BG3 fonts
-- [x] `styles.css` - BG3-themed styling:
+- [x] `index.html` - Main HTML page with fantasy fonts
+- [x] `styles.css` - parchment-themed styling:
   - Parchment-style subtitle box
   - Gold decorative elements
   - IM Fell English SC and Cinzel fonts

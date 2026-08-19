@@ -1,5 +1,5 @@
 /**
- * BG3 Narrator Web UI - WebSocket Integration
+ * Narrator Web UI - WebSocket Integration
  */
 
 class NarratorUI {

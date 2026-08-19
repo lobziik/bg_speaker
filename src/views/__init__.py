@@ -1,1 +1,1 @@
-"""Web UI views for BG3 Narrator Bot."""
+"""Web UI views for the Narrator Bot."""

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}BG3 Narrator{% endblock %}</title>
+    <title>{% block title %}Narrator{% endblock %}</title>
     <link rel="stylesheet" href="/static/css/main.css">
     <link rel="stylesheet" href="/static/css/components.css">
     <script src="/static/js/htmx.min.js"></script>
@@ -15,7 +15,7 @@
 </head>
 <body hx-headers='{"X-Requested-With": "htmx"}'>
     <nav class="sidebar">
-        <div class="logo">BG3 Narrator</div>
+        <div class="logo">Narrator</div>
         <ul class="nav-links">
             <li>
                 <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">

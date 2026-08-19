@@ -1,5 +1,5 @@
 [Unit]
-Description=Initialize BG3 narrator configuration
+Description=Initialize narrator configuration
 Documentation=https://github.com/lobziik/bg_speaker
 After=network.target
 Before=narrator-app.service narrator-caddy.service
