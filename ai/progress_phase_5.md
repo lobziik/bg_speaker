@@ -126,6 +126,17 @@ usable parts were wired up and the rest removed.
 - [x] Provider settings routes report validation failures as toasts; an
   out-of-range value used to raise a 500.
 
+### 9. Live Model Catalogues
+
+- [x] `list_models()` now queries the provider's API, so the dropdown lists the
+  models the configured key can use instead of a hardcoded set. Gemini filters on
+  `supported_actions`; Groq's SDK reports only an ID, so speech models are
+  excluded by substring.
+- [x] `src/providers/catalogue.py` memoises the listing for five minutes with an
+  absolute TTL, because the settings view builds a throwaway provider per render.
+- [x] A failed or empty listing logs a warning and falls back to the built-in
+  catalogue, which is what keeps `AVAILABLE_MODELS` meaningful.
+
 ## Bugs Found and Fixed Along the Way
 
 - `NarratorSettings.system_prompt` was never reaching the LLM: the pipeline's
@@ -171,7 +182,7 @@ usable parts were wired up and the rest removed.
 
 ## Verification
 
-- 252 tests pass (105 new: Gemini LLM, Gemini TTS, factory, worker pipeline swap,
+- 271 tests pass (124 new: Gemini LLM, Gemini TTS, factory, worker pipeline swap,
   database migrations, prompt templates, settings repository, schema-driven form
   rendering, and regression tests for the voice-override scoping bug, the
   settings page surviving a rejected stored row, and the provider swap no longer

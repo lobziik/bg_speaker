@@ -3,6 +3,16 @@
 import pytest
 from pydantic import SecretStr
 
+from src.providers.llm.gemini import MODEL_CATALOGUE as GEMINI_MODEL_CATALOGUE
+from src.providers.llm.groq import MODEL_CATALOGUE as GROQ_MODEL_CATALOGUE
+
+
+@pytest.fixture(autouse=True)
+def clear_model_catalogues() -> None:
+    """Keep the module-level catalogue memos from leaking between tests."""
+    GEMINI_MODEL_CATALOGUE.invalidate()
+    GROQ_MODEL_CATALOGUE.invalidate()
+
 
 @pytest.fixture
 def mock_api_key() -> SecretStr:

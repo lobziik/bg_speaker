@@ -9,6 +9,7 @@ import structlog
 from groq import APIConnectionError, APIStatusError, AsyncGroq
 from pydantic import SecretStr, ValidationError
 
+from src.providers.catalogue import ApiCatalogue
 from src.providers.llm.base import (
     LLMNarrationResponse,
     LLMProvider,
@@ -28,6 +29,15 @@ if TYPE_CHECKING:
     )
 
 logger = structlog.get_logger()
+
+# Memoised API listing; see src/providers/catalogue.py for why it lives here.
+MODEL_CATALOGUE: ApiCatalogue[Model] = ApiCatalogue("groq_models")
+
+# Groq's listing mixes chat models with speech ones, and the SDK's Model object
+# carries no modality to filter on - only an id. These substrings mark the
+# models that cannot answer a chat completion, so narration would fail at
+# request time if one were selectable.
+NON_CHAT_MODEL_MARKERS = ("whisper", "-tts", "tts-")
 
 
 class GroqLLMProvider:
@@ -354,9 +364,49 @@ class GroqLLMProvider:
 
         return result
 
+    @staticmethod
+    def _is_chat_model(model_id: str) -> bool:
+        """Whether a listed model can answer a chat completion.
+
+        Args:
+            model_id: Model ID as returned by the API.
+
+        Returns:
+            False for speech-to-text and text-to-speech models.
+        """
+        lowered = model_id.lower()
+        return not any(marker in lowered for marker in NON_CHAT_MODEL_MARKERS)
+
+    async def _fetch_models(self) -> list[Model]:
+        """Ask the API which models this key can use.
+
+        Returns:
+            Chat models, sorted by ID so the dropdown is stable.
+
+        Raises:
+            APIConnectionError: If the API cannot be reached.
+            APIStatusError: If the API returns an error status.
+        """
+        listing = await self._client.models.list()
+
+        # The SDK's Model exposes neither a context window nor a modality, so
+        # the length is reported as unknown and the ID doubles as the label.
+        return sorted(
+            (
+                Model(id=entry.id, name=entry.id, context_length=0)
+                for entry in listing.data
+                if self._is_chat_model(entry.id)
+            ),
+            key=lambda model: model.id,
+        )
+
     async def list_models(self) -> list[Model]:
-        """List available models."""
-        return self.AVAILABLE_MODELS.copy()
+        """List the models this API key can actually use.
+
+        Falls back to the built-in catalogue when the API cannot be reached, so
+        the settings form still renders without credentials or connectivity.
+        """
+        return await MODEL_CATALOGUE.get(self._fetch_models, self.AVAILABLE_MODELS)
 
     async def health_check(self) -> bool:
         """Check if provider is available."""

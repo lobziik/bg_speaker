@@ -3,7 +3,9 @@
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
+from groq import APIConnectionError
 from pydantic import SecretStr
 
 from src.providers.llm.base import LLMProvider, LLMResponse, Model
@@ -66,8 +68,11 @@ class TestGroqLLMProvider:
 
     @pytest.mark.asyncio
     async def test_list_models(self, mock_api_key: SecretStr) -> None:
-        """Test listing available models."""
+        """The built-in catalogue is used when the API cannot be reached."""
         provider = GroqLLMProvider(api_key=mock_api_key)
+        provider._fetch_models = AsyncMock(  # type: ignore[method-assign]
+            side_effect=ConnectionError("offline")
+        )
         models = await provider.list_models()
 
         assert len(models) > 0
@@ -195,3 +200,55 @@ class TestGroqLLMProvider:
 
             result = await provider.health_check()
             assert result is False
+
+
+class TestGroqModelListing:
+    """The dropdown reflects what this API key can actually use."""
+
+    @staticmethod
+    def _provider(ids: list[str] | Exception, api_key: SecretStr) -> GroqLLMProvider:
+        """Build a provider whose listing call is stubbed."""
+        provider = GroqLLMProvider(api_key=api_key)
+        if isinstance(ids, Exception):
+            provider._client.models.list = AsyncMock(side_effect=ids)  # type: ignore[method-assign]
+        else:
+            listing = MagicMock()
+            listing.data = [MagicMock(id=model_id) for model_id in ids]
+            provider._client.models.list = AsyncMock(return_value=listing)  # type: ignore[method-assign]
+        return provider
+
+    @pytest.mark.asyncio
+    async def test_speech_models_are_filtered_out(self, mock_api_key: SecretStr) -> None:
+        """Only chat models can answer a narration request."""
+        provider = self._provider(
+            [
+                "llama-3.3-70b-versatile",
+                "whisper-large-v3",
+                "playai-tts",
+                "llama-guard-4-12b",
+            ],
+            mock_api_key,
+        )
+
+        models = await provider.list_models()
+
+        assert [m.id for m in models] == ["llama-3.3-70b-versatile", "llama-guard-4-12b"]
+
+    @pytest.mark.asyncio
+    async def test_models_are_sorted(self, mock_api_key: SecretStr) -> None:
+        """A stable order keeps the dropdown from shuffling between renders."""
+        provider = self._provider(["zeta-model", "alpha-model"], mock_api_key)
+
+        assert [m.id for m in await provider.list_models()] == ["alpha-model", "zeta-model"]
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_the_builtin_catalogue(self, mock_api_key: SecretStr) -> None:
+        """An unreachable API leaves the form usable."""
+        provider = self._provider(
+            APIConnectionError(request=httpx.Request("GET", "https://api.groq.com")),
+            mock_api_key,
+        )
+
+        models = await provider.list_models()
+
+        assert [m.id for m in models] == [m.id for m in GroqLLMProvider.AVAILABLE_MODELS]

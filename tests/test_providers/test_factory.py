@@ -1,6 +1,7 @@
 """Tests for the provider factory."""
 
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import SecretStr
@@ -194,8 +195,13 @@ class TestDefaultsMatchCatalogues:
 
     @pytest.mark.asyncio
     async def test_gemini_llm_default_model_is_offered(self) -> None:
-        """The settings default must appear in the model dropdown."""
+        """The settings default must appear in the built-in dropdown.
+
+        The API listing is stubbed out: this is about the catalogue that ships,
+        which is what a form falls back to.
+        """
         provider = GeminiLLMProvider(api_key=SecretStr("test"))
+        provider._fetch_models = AsyncMock(side_effect=ConnectionError("offline"))  # type: ignore[method-assign]
         catalogue = {model.id for model in await provider.list_models()}
 
         assert GeminiLLMSettings().model in catalogue
@@ -204,6 +210,7 @@ class TestDefaultsMatchCatalogues:
     async def test_groq_default_model_is_offered(self) -> None:
         """Same for Groq: the form renders options from list_models()."""
         provider = GroqLLMProvider(api_key=SecretStr("test"))
+        provider._fetch_models = AsyncMock(side_effect=ConnectionError("offline"))  # type: ignore[method-assign]
         catalogue = {model.id for model in await provider.list_models()}
 
         assert GroqLLMSettings().model in catalogue
