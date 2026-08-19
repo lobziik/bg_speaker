@@ -131,7 +131,6 @@ class GeminiLLMProvider:
         temperature: float = 0.8,
         max_output_tokens: int = 500,
         thinking_level: str | None = "MINIMAL",
-        thinking_budget: int | None = None,
         safety_threshold: str = "BLOCK_ONLY_HIGH",
     ) -> None:
         """Initialize the Gemini provider.
@@ -142,10 +141,8 @@ class GeminiLLMProvider:
             temperature: Sampling temperature (0-2).
             max_output_tokens: Maximum tokens to generate per response.
             thinking_level: How much reasoning to spend before answering.
-                MINIMAL keeps narration latency down. None omits the setting.
-            thinking_budget: Older numeric form of the same control. -1 lets the
-                model decide. Mutually exclusive with thinking_level; current
-                models reject a budget of 0.
+                MINIMAL keeps narration latency down. None omits the setting and
+                lets the model decide.
             safety_threshold: Gemini safety filter threshold applied to the
                 harassment / hate / sexual / dangerous categories. Defaults to
                 BLOCK_ONLY_HIGH so fantasy violence passes while high-severity
@@ -153,21 +150,13 @@ class GeminiLLMProvider:
                 Twitch-policy gate.
 
         Raises:
-            ValueError: If both thinking controls are set, if the level is not a
-                valid ThinkingLevel, or if safety_threshold is not a valid
-                HarmBlockThreshold value.
+            ValueError: If the level is not a valid ThinkingLevel, or if
+                safety_threshold is not a valid HarmBlockThreshold value.
         """
-        if thinking_level is not None and thinking_budget is not None:
-            raise ValueError(
-                "Set either thinking_level or thinking_budget, not both - they are "
-                "two spellings of the same control and the API rejects the pair."
-            )
-
         self._api_key = api_key
         self._model = model
         self._temperature = temperature
         self._max_output_tokens = max_output_tokens
-        self._thinking_budget = thinking_budget
         self._thinking_level = (
             self._parse_thinking_level(thinking_level) if thinking_level is not None else None
         )
@@ -242,8 +231,6 @@ class GeminiLLMProvider:
         thinking_config: genai_types.ThinkingConfig | None = None
         if self._thinking_level is not None:
             thinking_config = genai_types.ThinkingConfig(thinking_level=self._thinking_level)
-        elif self._thinking_budget is not None:
-            thinking_config = genai_types.ThinkingConfig(thinking_budget=self._thinking_budget)
 
         return genai_types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -350,7 +337,6 @@ class GeminiLLMProvider:
                 code=e.code,
                 error=e.message,
                 thinking_level=self._thinking_level,
-                thinking_budget=self._thinking_budget,
                 safety_threshold=self._safety_threshold,
             )
             raise
@@ -680,18 +666,6 @@ class GeminiLLMProvider:
                     ),
                     "default": "MINIMAL",
                     "enum": [level.value for level in genai_types.ThinkingLevel],
-                },
-                "thinking_budget": {
-                    "type": ["integer", "null"],
-                    "title": "Thinking Budget",
-                    "description": (
-                        "Older numeric form of the thinking level, in tokens; -1 lets the "
-                        "model decide. Only used when the level is empty, and current "
-                        "models reject a budget of 0"
-                    ),
-                    "default": None,
-                    "minimum": -1,
-                    "maximum": 24576,
                 },
                 "safety_threshold": {
                     "type": "string",

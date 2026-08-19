@@ -62,9 +62,10 @@ class TestGroqLLMProvider:
     def test_default_values(self, mock_api_key: SecretStr) -> None:
         """Test default initialization values."""
         provider = GroqLLMProvider(api_key=mock_api_key)
-        assert provider._model == "llama-3.3-70b-versatile"
+        assert provider._model == "openai/gpt-oss-120b"
         assert provider._temperature == 0.8
         assert provider._max_tokens == 500
+        assert provider._reasoning_effort is None
 
     @pytest.mark.asyncio
     async def test_list_models(self, mock_api_key: SecretStr) -> None:
@@ -77,7 +78,7 @@ class TestGroqLLMProvider:
 
         assert len(models) > 0
         assert all(isinstance(m, Model) for m in models)
-        assert any(m.id == "llama-3.3-70b-versatile" for m in models)
+        assert any(m.id == "openai/gpt-oss-120b" for m in models)
 
     def test_settings_schema(self, mock_api_key: SecretStr) -> None:
         """Test settings schema generation."""
@@ -218,21 +219,22 @@ class TestGroqModelListing:
         return provider
 
     @pytest.mark.asyncio
-    async def test_speech_models_are_filtered_out(self, mock_api_key: SecretStr) -> None:
-        """Only chat models can answer a narration request."""
+    async def test_non_chat_models_are_filtered_out(self, mock_api_key: SecretStr) -> None:
+        """Speech models and safety classifiers cannot answer a narration request."""
         provider = self._provider(
             [
-                "llama-3.3-70b-versatile",
+                "openai/gpt-oss-120b",
                 "whisper-large-v3",
                 "playai-tts",
-                "llama-guard-4-12b",
+                "canopylabs/orpheus-v1-english",
+                "meta-llama/llama-prompt-guard-2-86m",
             ],
             mock_api_key,
         )
 
         models = await provider.list_models()
 
-        assert [m.id for m in models] == ["llama-3.3-70b-versatile", "llama-guard-4-12b"]
+        assert [m.id for m in models] == ["openai/gpt-oss-120b"]
 
     @pytest.mark.asyncio
     async def test_models_are_sorted(self, mock_api_key: SecretStr) -> None:

@@ -165,10 +165,9 @@ class TestRealProviderSchemas:
             "temperature",
             "max_output_tokens",
             "thinking_level",
-            "thinking_budget",
             "safety_threshold",
         ]
-        assert fields[4].optional is True
+        assert fields[3].kind is FieldKind.SELECT
 
     def test_gemini_tts(self) -> None:
         """The Gemini TTS form puts the style direction in a textarea."""

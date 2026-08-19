@@ -114,16 +114,6 @@ class TestBuildLLMProvider:
                 gemini_settings=GeminiLLMSettings(),
             )
 
-    def test_invalid_gemini_settings_propagate(self) -> None:
-        """A refused combination surfaces as ValueError, not a broken provider."""
-        with pytest.raises(ValueError, match="not both"):
-            build_llm_provider(
-                env=_env(gemini="AIza_test"),
-                provider=LLMProviderName.GEMINI,
-                groq_settings=GroqLLMSettings(),
-                gemini_settings=GeminiLLMSettings(thinking_budget=0),
-            )
-
 
 class TestBuildTTSProvider:
     """TTS provider construction from selection plus environment."""
@@ -239,5 +229,4 @@ class TestDefaultsMatchCatalogues:
             api_key=SecretStr("test"),
             model=settings.model,
             thinking_level=(settings.thinking_level.value if settings.thinking_level else None),
-            thinking_budget=settings.thinking_budget,
         )
