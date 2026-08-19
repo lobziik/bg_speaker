@@ -61,6 +61,20 @@ needs a chunked WebSocket protocol that does not exist yet.
 - `get_settings_schema()` renders the provider's form on the Providers tab (see below).
 - `list_models()` / `list_voices()` fill the model and voice dropdowns, so a provider's catalogue
   has one source of truth.
+
+### Live Model Catalogues
+`list_models()` asks the provider's API which models the configured key can actually use, so the
+dropdown reflects the account rather than a list baked into the source.
+
+- Gemini filters on `supported_actions` containing `generateContent`, which is authoritative.
+- Groq's SDK exposes only an ID, so speech models are filtered out by substring
+  (`NON_CHAT_MODEL_MARKERS`) - a heuristic, and the reason the built-in list still matters.
+- `AVAILABLE_MODELS` remains the fallback: a failed or empty listing logs a warning and the form
+  renders the built-in catalogue rather than an empty dropdown.
+- `src/providers/catalogue.py` memoises the result for five minutes, keyed per provider module,
+  because the settings view builds a throwaway provider on every render. The TTL is absolute, so
+  a frequently viewed page still refreshes. Tests must call `invalidate()` - `tests/conftest.py`
+  does it automatically.
 - Both protocols include `close()`; `TTSProvider` also includes `start()`, so the app lifecycle can
   treat every provider the same when swapping them at runtime.
 

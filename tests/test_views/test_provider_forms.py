@@ -19,6 +19,7 @@ from src.models.settings import (
     ProviderSettings,
     TTSProviderName,
 )
+from src.providers.catalogue import ApiCatalogue
 from src.providers.tts.gemini import GeminiTTSSettings
 from src.views.settings import (
     _build_provider_forms,
@@ -37,6 +38,24 @@ def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     for name in ("GROQ_API_KEY", "GEMINI_API_KEY"):
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def offline_catalogues(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests are about assembling the form, not about the API listing.
+
+    Without this the throwaway providers would each try to reach their API and
+    fall back after a timeout.
+    """
+
+    async def fallback_only(
+        _self: ApiCatalogue[object],
+        _fetch: object,
+        fallback: list[object],
+    ) -> list[object]:
+        return list(fallback)
+
+    monkeypatch.setattr(ApiCatalogue, "get", fallback_only)
 
 
 @pytest_asyncio.fixture

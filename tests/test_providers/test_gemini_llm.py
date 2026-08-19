@@ -1,8 +1,11 @@
 """Tests for the Gemini LLM provider."""
 
 import json
+from collections.abc import AsyncIterator
+from unittest.mock import AsyncMock
 
 import pytest
+from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 from pydantic import SecretStr
 
@@ -197,8 +200,11 @@ class TestGeminiLLMMetadata:
 
     @pytest.mark.asyncio
     async def test_list_models(self, mock_api_key: SecretStr) -> None:
-        """The advertised catalogue contains the default model."""
+        """The built-in catalogue contains the default model."""
         provider = GeminiLLMProvider(api_key=mock_api_key)
+        provider._fetch_models = AsyncMock(  # type: ignore[method-assign]
+            side_effect=ConnectionError("offline")
+        )
         models = await provider.list_models()
 
         assert len(models) > 0
@@ -219,3 +225,78 @@ class TestGeminiLLMMetadata:
             "thinking_budget",
             "safety_threshold",
         }
+
+
+class _FakePager:
+    """Minimal stand-in for the SDK's AsyncPager over listed models."""
+
+    def __init__(self, entries: list[genai_types.Model]) -> None:
+        self._entries = entries
+
+    async def __aiter__(self) -> AsyncIterator[genai_types.Model]:
+        for entry in self._entries:
+            yield entry
+
+
+class TestGeminiModelListing:
+    """The dropdown reflects what this API key can actually use."""
+
+    @staticmethod
+    def _provider(entries: list[genai_types.Model] | Exception) -> GeminiLLMProvider:
+        """Build a provider whose listing call is stubbed."""
+        provider = GeminiLLMProvider(api_key=SecretStr("test"))
+        if isinstance(entries, Exception):
+            provider._client.aio.models.list = AsyncMock(side_effect=entries)  # type: ignore[method-assign]
+        else:
+            provider._client.aio.models.list = AsyncMock(  # type: ignore[method-assign]
+                return_value=_FakePager(entries)
+            )
+        return provider
+
+    @pytest.mark.asyncio
+    async def test_lists_models_that_can_narrate(self) -> None:
+        """Only generateContent models are offered, with the prefix stripped."""
+        provider = self._provider(
+            [
+                genai_types.Model(
+                    name="models/gemini-9.9-flash",
+                    display_name="Gemini 9.9 Flash",
+                    input_token_limit=2_000_000,
+                    supported_actions=["generateContent", "countTokens"],
+                ),
+                genai_types.Model(
+                    name="models/text-embedding-004",
+                    display_name="Embedding",
+                    supported_actions=["embedContent"],
+                ),
+            ]
+        )
+
+        models = await provider.list_models()
+
+        assert [m.id for m in models] == ["gemini-9.9-flash"]
+        assert models[0].name == "Gemini 9.9 Flash"
+        assert models[0].context_length == 2_000_000
+
+    @pytest.mark.asyncio
+    async def test_id_is_used_when_the_api_omits_a_display_name(self) -> None:
+        """A dropdown entry always has a label."""
+        provider = self._provider(
+            [
+                genai_types.Model(
+                    name="models/gemini-experimental",
+                    supported_actions=["generateContent"],
+                )
+            ]
+        )
+
+        assert (await provider.list_models())[0].name == "gemini-experimental"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_the_builtin_catalogue(self) -> None:
+        """An unreachable API leaves the form usable."""
+        provider = self._provider(genai_errors.ClientError(401, {"error": {"message": "bad key"}}))
+
+        models = await provider.list_models()
+
+        assert [m.id for m in models] == [m.id for m in GeminiLLMProvider.AVAILABLE_MODELS]

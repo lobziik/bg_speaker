@@ -11,6 +11,7 @@ from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 from pydantic import SecretStr, ValidationError
 
+from src.providers.catalogue import ApiCatalogue
 from src.providers.llm.base import (
     LLMContentBlockedError,
     LLMNarrationResponse,
@@ -22,6 +23,15 @@ from src.providers.llm.base import (
 )
 
 logger = structlog.get_logger()
+
+# The API's own model list, memoised so rendering the settings form does not
+# call out on every page load. Module level, because the settings view builds a
+# throwaway provider instance for each render.
+MODEL_CATALOGUE: ApiCatalogue[Model] = ApiCatalogue("gemini_models")
+
+# Only models that can answer a generateContent call are narration candidates;
+# the same listing carries embedding and image models.
+NARRATION_ACTION = "generateContent"
 
 
 # Response schema for narration calls. Declared explicitly rather than derived
@@ -551,9 +561,43 @@ class GeminiLLMProvider:
 
         return result
 
+    async def _fetch_models(self) -> list[Model]:
+        """Ask the API which models this key can use for narration.
+
+        Returns:
+            Models that support generateContent, newest first as the API
+            orders them.
+
+        Raises:
+            genai_errors.APIError: If the listing call fails.
+        """
+        models: list[Model] = []
+
+        pager = await self._client.aio.models.list(
+            config=genai_types.ListModelsConfig(query_base=True)
+        )
+        async for entry in pager:
+            actions = entry.supported_actions or []
+            if NARRATION_ACTION not in actions or entry.name is None:
+                continue
+            model_id = entry.name.removeprefix("models/")
+            models.append(
+                Model(
+                    id=model_id,
+                    name=entry.display_name or model_id,
+                    context_length=entry.input_token_limit or 0,
+                )
+            )
+
+        return models
+
     async def list_models(self) -> list[Model]:
-        """List available models."""
-        return self.AVAILABLE_MODELS.copy()
+        """List the models this API key can actually use.
+
+        Falls back to the built-in catalogue when the API cannot be reached, so
+        the settings form still renders without credentials or connectivity.
+        """
+        return await MODEL_CATALOGUE.get(self._fetch_models, self.AVAILABLE_MODELS)
 
     async def health_check(self) -> bool:
         """Check if provider is available."""
