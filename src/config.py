@@ -31,6 +31,8 @@ class EnvSettings(BaseSettings):
 
     # LLM Providers
     groq_api_key: SecretStr | None = None
+    # Google Gemini - powers both the LLM and the TTS provider
+    gemini_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None
     openrouter_api_key: SecretStr | None = None
@@ -66,34 +68,39 @@ class EnvSettings(BaseSettings):
     log_level: Literal["debug", "info", "warning", "error"] = "info"
 
     def get_available_llm_providers(self) -> list[str]:
-        """Return list of configured LLM providers."""
+        """Return the LLM providers that are both implemented and configured.
+
+        Only providers with a working implementation in ``src/providers/llm``
+        are reported - listing unimplemented ones would let the Web UI select
+        a provider the factory cannot build.
+
+        Returns:
+            Provider names usable right now (e.g. ``["groq", "gemini"]``).
+        """
         providers: list[str] = []
         if self.groq_api_key:
             providers.append("groq")
-        if self.openai_api_key:
-            providers.append("openai")
-        if self.anthropic_api_key:
-            providers.append("anthropic")
-        if self.openrouter_api_key:
-            providers.append("openrouter")
-        providers.append("ollama")  # Always available (local)
+        if self.gemini_api_key:
+            providers.append("gemini")
         return providers
 
     def get_available_tts_providers(self) -> list[str]:
-        """Return list of configured TTS providers."""
-        providers: list[str] = ["piper"]  # Always available
-        if self.elevenlabs_api_key:
-            providers.append("elevenlabs")
+        """Return the TTS providers that are both implemented and configured.
+
+        Piper runs locally and is therefore always available; Gemini TTS
+        requires ``GEMINI_API_KEY``.
+
+        Returns:
+            Provider names usable right now (e.g. ``["piper", "gemini"]``).
+        """
+        providers: list[str] = ["piper"]  # Always available (local, no API key)
+        if self.gemini_api_key:
+            providers.append("gemini")
         return providers
 
     def has_required_llm_provider(self) -> bool:
-        """Check if at least one LLM provider is configured."""
-        return bool(
-            self.groq_api_key
-            or self.openai_api_key
-            or self.anthropic_api_key
-            or self.openrouter_api_key
-        )
+        """Check if at least one usable LLM provider is configured."""
+        return bool(self.get_available_llm_providers())
 
 
 # Global settings instance (lazy loaded)

@@ -1,0 +1,110 @@
+<form id="prompts-form"
+      hx-post="/settings/prompts"
+      hx-target="#toast-container"
+      hx-swap="innerHTML">
+
+    <div class="form-section">
+        <div class="form-section-title">Narration</div>
+
+        <div class="form-group">
+            <label for="base_system">Format Contract</label>
+            <textarea name="base_system" id="base_system" rows="14">{{ prompts.base_system }}</textarea>
+            <small class="help-text">
+                Sent first. It defines the JSON the model must return -
+                <code>voice_text</code> and <code>subtitle_text</code> must keep those exact
+                names, or every narration will fail to parse.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="language_dual">Language - two languages</label>
+            <textarea name="language_dual" id="language_dual" rows="7">{{ prompts.language_dual }}</textarea>
+            <small class="help-text">
+                Used when auto-translate is on and the narrator and subtitle languages differ.
+                Placeholders: <code>$narrator_lang_name</code>, <code>$narrator_lang_code</code>,
+                <code>$subtitle_lang_name</code>, <code>$subtitle_lang_code</code>.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="language_single">Language - single language</label>
+            <textarea name="language_single" id="language_single" rows="5">{{ prompts.language_single }}</textarea>
+            <small class="help-text">
+                Used when both fields share a language. Placeholders:
+                <code>$narrator_lang_name</code>, <code>$narrator_lang_code</code>.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="formatting">Formatting Guidelines</label>
+            <textarea name="formatting" id="formatting" rows="7">{{ prompts.formatting }}</textarea>
+            <small class="help-text">Appended last: length, tone and phrasing rules.</small>
+        </div>
+    </div>
+
+    <div class="form-section" style="margin-top: 2rem;">
+        <div class="form-section-title">Styles</div>
+        <p class="help-text" style="margin-bottom: 1rem;">
+            One flair section per narrator style. The style is chosen per redemption;
+            the default comes from Narrator settings.
+        </p>
+
+        <div class="form-group">
+            <label for="style_default">Default</label>
+            <textarea name="style_default" id="style_default" rows="3">{{ prompts.style_default }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="style_whisper">Whisper</label>
+            <textarea name="style_whisper" id="style_whisper" rows="3">{{ prompts.style_whisper }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="style_proclaim">Proclaim</label>
+            <textarea name="style_proclaim" id="style_proclaim" rows="3">{{ prompts.style_proclaim }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="style_mock">Mock</label>
+            <textarea name="style_mock" id="style_mock" rows="3">{{ prompts.style_mock }}</textarea>
+        </div>
+    </div>
+
+    <div class="form-section" style="margin-top: 2rem;">
+        <div class="form-section-title">Moderation</div>
+        <p class="help-text" style="margin-bottom: 1rem;">
+            Used only when moderation is enabled in Narrator settings. A rejected message
+            consumes the viewer's Channel Points without a refund, so keep the rules lenient
+            enough for fantasy violence.
+        </p>
+
+        <div class="form-group">
+            <label for="moderation_system">Moderation System Prompt</label>
+            <textarea name="moderation_system" id="moderation_system" rows="20">{{ prompts.moderation_system }}</textarea>
+            <small class="help-text">
+                Must keep asking for the <code>allowed</code> / <code>reason</code> /
+                <code>category</code> JSON shape - the result is parsed, not read.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="moderation_user">Moderation User Prompt</label>
+            <textarea name="moderation_user" id="moderation_user" rows="4">{{ prompts.moderation_user }}</textarea>
+            <small class="help-text">
+                Carries the message under review. Placeholders: <code>$message</code> (required),
+                <code>$user</code>.
+            </small>
+        </div>
+    </div>
+
+    <div class="btn-group" style="margin-top: 1.5rem;">
+        <button type="submit" class="btn btn-primary">Save Prompts</button>
+        <button type="button" class="btn btn-secondary"
+                hx-post="/settings/prompts/reset"
+                hx-target="#prompts-form"
+                hx-swap="outerHTML"
+                hx-confirm="Replace every prompt section with the built-in defaults?">
+            Reset to Defaults
+        </button>
+    </div>
+</form>

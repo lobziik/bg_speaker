@@ -83,7 +83,7 @@ class TestGroqLLMProvider:
 
         assert schema["type"] == "object"
         assert "properties" in schema
-        properties = cast(dict[str, object], schema["properties"])
+        properties = cast("dict[str, object]", schema["properties"])
         assert "model" in properties
         assert "temperature" in properties
         assert "max_tokens" in properties

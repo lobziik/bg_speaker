@@ -14,6 +14,11 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
+# Migrations ship with the source tree (src/db/manager.py -> <root>/migrations),
+# so the default must be anchored to the package rather than the process working
+# directory - the container runs the app from the data volume, not from /app.
+DEFAULT_MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
+
 
 class DatabaseNotInitializedError(Exception):
     """Raised when database is accessed before initialization."""
@@ -55,10 +60,11 @@ class DatabaseManager:
 
         Args:
             db_path: Path to SQLite database file.
-            migrations_dir: Path to migrations folder (default: ./migrations).
+            migrations_dir: Path to migrations folder. Defaults to the
+                ``migrations`` directory shipped alongside the source tree.
         """
         self._db_path = db_path
-        self._migrations_dir = migrations_dir or Path("migrations")
+        self._migrations_dir = migrations_dir or DEFAULT_MIGRATIONS_DIR
         self._connection: aiosqlite.Connection | None = None
 
     @property
@@ -121,10 +127,19 @@ class DatabaseManager:
             raise
 
     async def _run_migrations(self) -> None:
-        """Run pending SQL migrations from migrations folder."""
+        """Run pending SQL migrations from the migrations folder.
+
+        Raises:
+            MigrationError: If the migrations directory is missing. Skipping it
+                silently would leave the app running against a schema-less
+                database and fail later with a confusing "no such table" error.
+        """
         if not self._migrations_dir.exists():
-            logger.debug("migrations_dir_not_found", path=str(self._migrations_dir))
-            return
+            raise MigrationError(
+                f"Migrations directory not found: {self._migrations_dir}. "
+                f"Pass migrations_dir explicitly or run from a checkout that "
+                f"contains it."
+            )
 
         conn = self.connection
 

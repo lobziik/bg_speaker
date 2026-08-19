@@ -22,7 +22,8 @@ from src.services.twitch.auth import TwitchAuthService
 TEMPLATES_PATH = Path(__file__).parent.parent / "templates"
 
 if TYPE_CHECKING:
-    from src.providers.tts.piper import PiperTTSProvider
+    from src.providers.llm.base import LLMProvider
+    from src.providers.tts.base import TTSProvider
     from src.services.global_cooldown import GlobalCooldownManager
     from src.services.pipeline import NarrationPipeline
     from src.services.twitch.eventsub import TwitchEventSubService
@@ -48,7 +49,8 @@ class AppState:
     twitch_eventsub: TwitchEventSubService | None = None
     twitch_rewards: TwitchRewardController | None = None
     global_cooldown: GlobalCooldownManager | None = None
-    tts_provider: PiperTTSProvider | None = None
+    llm_provider: LLMProvider | None = None
+    tts_provider: TTSProvider | None = None
     _initialized: bool = field(default=False, repr=False)
 
     async def initialize(self) -> None:
@@ -57,6 +59,61 @@ class AppState:
             return
         await self.db.initialize()
         self._initialized = True
+
+    async def rebuild_pipeline(self) -> None:
+        """(Re)build the narration pipeline from the currently stored settings.
+
+        Used both for the initial wiring at startup and after a provider change
+        in the Web UI, so a new selection takes effect without restarting the
+        app. Any narration already in flight finishes on the old pipeline; its
+        providers are closed only afterwards. Starts the queue worker if it is
+        not running yet.
+
+        Raises:
+            ProviderConfigurationError: If the selected provider cannot be built
+                (e.g. its API key is missing). The previous pipeline is left
+                untouched in that case.
+        """
+        from src.api.websocket import get_websocket_manager
+        from src.providers.factory import build_providers
+        from src.services.pipeline import NarrationPipeline
+        from src.services.worker import QueueWorker
+
+        settings_repo = SettingsRepository(self.db.connection)
+        llm_provider, tts_provider = await build_providers(self.env, settings_repo)
+        await tts_provider.start()
+
+        pipeline = NarrationPipeline(
+            llm_provider=llm_provider,
+            tts_provider=tts_provider,
+        )
+
+        previous_llm = self.llm_provider
+        previous_tts = self.tts_provider
+
+        if self.worker is None:
+            self.worker = QueueWorker(
+                queue=self.queue,
+                pipeline=pipeline,
+                ws_manager=get_websocket_manager(),
+                rewards_controller=self.twitch_rewards,
+                db_connection=self.db.connection,
+                global_cooldown=self.global_cooldown,
+            )
+            await self.worker.start()
+        else:
+            # Swapping the worker's pipeline waits for the in-flight item, which
+            # is what makes closing the previous providers below safe.
+            await self.worker.set_pipeline(pipeline)
+
+        self.pipeline = pipeline
+        self.llm_provider = llm_provider
+        self.tts_provider = tts_provider
+
+        if previous_tts is not None:
+            await previous_tts.close()
+        if previous_llm is not None:
+            await previous_llm.close()
 
     async def shutdown(self) -> None:
         """Shutdown all services."""
@@ -70,6 +127,8 @@ class AppState:
             await self.twitch_rewards.close()
         if self.tts_provider:
             await self.tts_provider.close()
+        if self.llm_provider:
+            await self.llm_provider.close()
         await self.twitch_auth.close()
         await self.queue.shutdown()
         await self.db.close()
@@ -79,8 +138,15 @@ class AppState:
 _app_state: AppState | None = None
 
 
-def _parse_db_path(database_url: str) -> Path:
-    """Parse SQLite database path from URL."""
+def parse_db_path(database_url: str) -> Path:
+    """Parse the SQLite database path out of a DATABASE_URL.
+
+    Args:
+        database_url: Either a ``sqlite:///`` URL or a bare filesystem path.
+
+    Returns:
+        Filesystem path to the SQLite database file.
+    """
     if database_url.startswith("sqlite:///"):
         return Path(database_url.replace("sqlite:///", ""))
     return Path(database_url)
@@ -92,7 +158,7 @@ def get_app_state() -> AppState:
 
     if _app_state is None:
         env = get_env_settings()
-        db = DatabaseManager(_parse_db_path(env.database_url))
+        db = DatabaseManager(parse_db_path(env.database_url))
 
         rate_limiter = RateLimiter(
             tts_rate_limit_seconds=10.0,

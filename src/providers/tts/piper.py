@@ -414,6 +414,21 @@ class PiperTTSProvider:
             noise_w=self._settings.noise_w,
         )
 
+    def current_settings(self) -> tuple[float, float, float]:
+        """Return the synthesis knobs currently in effect.
+
+        Lets callers (such as the settings preview) audition new values and
+        restore the previous ones without reaching into private state.
+
+        Returns:
+            Tuple of (length_scale, noise_scale, noise_w).
+        """
+        return (
+            self._settings.length_scale,
+            self._settings.noise_scale,
+            self._settings.noise_w,
+        )
+
     def get_voice_for_language(self, lang: LanguageCode) -> str:
         """Get the voice ID for a given language.
 

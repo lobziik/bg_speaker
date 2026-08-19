@@ -66,6 +66,32 @@ class LLMResponseParseError(Exception):
         super().__init__(f"Failed to parse LLM response: {parse_error}")
 
 
+class LLMContentBlockedError(Exception):
+    """Raised when the LLM provider's own safety filter blocks a request.
+
+    Distinct from :class:`LLMResponseParseError`: nothing went wrong
+    technically, the provider simply refused to process or return content.
+    The pipeline maps this onto a moderation rejection so the redemption is
+    consumed instead of refunded - a blocked message is a policy problem,
+    not an outage.
+
+    Attributes:
+        reason: Provider-reported reason (e.g. a finish reason or block reason).
+        stage: Which call was blocked ("narration" or "moderation").
+    """
+
+    def __init__(self, reason: str, stage: str) -> None:
+        """Initialize the exception.
+
+        Args:
+            reason: Provider-reported reason for the block.
+            stage: Which call was blocked ("narration" or "moderation").
+        """
+        self.reason = reason
+        self.stage = stage
+        super().__init__(f"LLM provider blocked the {stage} request: {reason}")
+
+
 @dataclass(frozen=True)
 class LLMResponse:
     """Response from LLM generation.
@@ -145,14 +171,19 @@ class LLMProvider(Protocol):
     async def moderate(
         self,
         user: str,
-        message: str,
+        system_prompt: str,
+        user_prompt: str,
         model: str | None = None,
     ) -> ModerationResult:
-        """Check message for Twitch policy compliance.
+        """Check a message for Twitch policy compliance.
+
+        Both prompts are supplied by the caller because they are operator-editable
+        settings, not provider internals.
 
         Args:
-            user: Username who sent the message.
-            message: Message to validate.
+            user: Username who sent the message, for logging context.
+            system_prompt: Moderation system prompt.
+            user_prompt: User prompt carrying the message under review.
             model: Optional model ID override (defaults to provider's configured model).
 
         Returns:
@@ -186,6 +217,14 @@ class LLMProvider(Protocol):
 
     async def health_check(self) -> bool:
         """Check if provider is available."""
+        ...
+
+    async def close(self) -> None:
+        """Release provider resources (HTTP clients, connection pools).
+
+        Called on application shutdown and whenever the active provider is
+        swapped at runtime. Implementations must be safe to call multiple times.
+        """
         ...
 
     def get_settings_schema(self) -> dict[str, object]:

@@ -6,6 +6,7 @@ import pytest
 
 from src.models.narration import LanguageCode, NarrationRequest, NarratorStyle
 from src.providers.llm.base import LLMResponse, LLMResponseParseError, ModerationResult
+from src.providers.llm.prompts import PromptSettings
 from src.services.pipeline import ModerationRejectedError, NarrationPipeline, PipelineMetrics
 
 
@@ -415,3 +416,69 @@ class TestModerationCheck:
 
         assert exc_info.value.category == "parse_error"
         assert "cannot verify content safety" in exc_info.value.reason.lower()
+
+
+class TestEditablePrompts:
+    """The stored prompt sections are what actually reach the providers."""
+
+    @pytest.mark.asyncio
+    async def test_narration_uses_stored_sections(
+        self,
+        pipeline: NarrationPipeline,
+        mock_llm_provider: MagicMock,
+    ) -> None:
+        """An edited section shows up in the system prompt sent to the LLM."""
+        prompts = PromptSettings(
+            base_system="Answer in JSON with voice_text and subtitle_text.",
+            formatting="Formatting: one word only.",
+        )
+
+        await pipeline.process(
+            NarrationRequest(user="TestUser", message="hello"),
+            enable_moderation=False,
+            prompts=prompts,
+        )
+
+        system_prompt = mock_llm_provider.generate.call_args.kwargs["system_prompt"]
+        assert system_prompt.startswith("Answer in JSON with voice_text and subtitle_text.")
+        assert "Formatting: one word only." in system_prompt
+
+    @pytest.mark.asyncio
+    async def test_moderation_uses_stored_prompts(
+        self,
+        pipeline: NarrationPipeline,
+        mock_llm_provider: MagicMock,
+    ) -> None:
+        """Moderation prompts come from settings, not from provider internals."""
+        mock_llm_provider.moderate = AsyncMock(
+            return_value=ModerationResult(allowed=True, reason="", category="")
+        )
+        prompts = PromptSettings(
+            moderation_system="Only block real threats. Reply with JSON.",
+            moderation_user="CHECK[$user]: $message",
+        )
+
+        await pipeline.process(
+            NarrationRequest(user="DragonSlayer", message="I found a sword"),
+            enable_moderation=True,
+            prompts=prompts,
+        )
+
+        kwargs = mock_llm_provider.moderate.call_args.kwargs
+        assert kwargs["system_prompt"] == "Only block real threats. Reply with JSON."
+        assert kwargs["user_prompt"] == "CHECK[DragonSlayer]: I found a sword"
+
+    @pytest.mark.asyncio
+    async def test_defaults_used_when_not_supplied(
+        self,
+        pipeline: NarrationPipeline,
+        mock_llm_provider: MagicMock,
+    ) -> None:
+        """Callers that pass no prompts get the built-in defaults."""
+        await pipeline.process(
+            NarrationRequest(user="TestUser", message="hello"),
+            enable_moderation=False,
+        )
+
+        system_prompt = mock_llm_provider.generate.call_args.kwargs["system_prompt"]
+        assert "You are the narrator from Baldur's Gate 3" in system_prompt

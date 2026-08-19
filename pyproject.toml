@@ -25,6 +25,8 @@ dependencies = [
     "piper-tts>=1.2.0",
     # LLM clients
     "groq>=0.11.0",
+    # Gemini (LLM + TTS)
+    "google-genai>=2.0.0",
     # Utilities
     "structlog>=24.0.0",
     "tenacity>=9.0.0",

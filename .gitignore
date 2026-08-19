@@ -212,3 +212,6 @@ models/piper/*.onnx
 models/piper/*.onnx.json
 output.wav
 *.wav
+
+# macOS
+.DS_Store

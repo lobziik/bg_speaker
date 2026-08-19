@@ -15,10 +15,24 @@ from typing import Literal
 import structlog
 import uvicorn
 
+from src.api.dependencies import parse_db_path
 from src.config import get_env_settings
+from src.db.manager import DatabaseManager
+from src.db.repositories.settings import SettingsRepository
 from src.models.narration import NarrationRequest, NarratorStyle
-from src.providers.llm.groq import GroqLLMProvider
-from src.providers.tts.piper import PiperSettings, PiperTTSProvider
+from src.models.settings import (
+    LanguageSettings,
+    LLMProviderName,
+    NarratorSettings,
+    ProviderSettings,
+    TTSProviderName,
+)
+from src.providers.factory import (
+    ProviderConfigurationError,
+    build_providers,
+    load_provider_settings,
+)
+from src.providers.llm.prompts import PromptSettings
 from src.services.pipeline import NarrationPipeline
 
 LogLevel = Literal["debug", "info", "warning", "error"]
@@ -126,76 +140,117 @@ async def run_pipeline(
     user: str = "Adventurer",
     style: str = "default",
     output_path: Path | None = None,
+    llm_provider: str | None = None,
+    tts_provider: str | None = None,
 ) -> None:
     """Run the narration pipeline on a message.
 
+    Uses the same providers and language settings as the server, so a CLI test
+    reflects what a Twitch redemption would actually produce. The provider
+    overrides apply to this run only - nothing is written back to the database.
+
     Args:
-        message: Message to narrate
-        user: Username (for narrative reference)
-        style: Narrator style
-        output_path: Path to save audio file (optional)
+        message: Message to narrate.
+        user: Username (for narrative reference).
+        style: Narrator style.
+        output_path: Path to save audio file (defaults to output.wav).
+        llm_provider: Override the stored LLM provider for this run.
+        tts_provider: Override the stored TTS provider for this run.
     """
     env = get_env_settings()
 
-    # Check for required API key
-    if env.groq_api_key is None:
-        logger.error("GROQ_API_KEY environment variable not set")
-        sys.exit(1)
+    db = DatabaseManager(parse_db_path(env.database_url))
+    await db.initialize()
 
-    assert env.groq_api_key is not None  # For type narrowing after sys.exit
-
-    # Initialize providers
-    logger.info("Initializing providers...")
-
-    llm = GroqLLMProvider(api_key=env.groq_api_key)
-    tts = PiperTTSProvider(settings=PiperSettings())
-
-    # Create pipeline
-    pipeline = NarrationPipeline(llm_provider=llm, tts_provider=tts)
-
-    # Check health
-    health = await pipeline.health_check()
-    if not health["pipeline"]:
-        logger.error("Pipeline health check failed", health=health)
-        sys.exit(1)
-
-    logger.info("Pipeline ready", health=health)
-
-    # Create request
     try:
-        narrator_style = NarratorStyle(style)
-    except ValueError:
-        logger.warning(f"Unknown style '{style}', using default")
-        narrator_style = NarratorStyle.DEFAULT
+        settings_repo = SettingsRepository(db.connection)
+        selection = await load_provider_settings(settings_repo, env)
+        if llm_provider or tts_provider:
+            selection = ProviderSettings(
+                llm=LLMProviderName(llm_provider) if llm_provider else selection.llm,
+                tts=TTSProviderName(tts_provider) if tts_provider else selection.tts,
+            )
 
-    request = NarrationRequest(
-        user=user,
-        message=message,
-        style=narrator_style,
-    )
+        logger.info(
+            "Initializing providers...",
+            llm_provider=selection.llm.value,
+            tts_provider=selection.tts.value,
+        )
 
-    # Process
-    logger.info("Processing narration...", user=user, message=message[:50])
+        try:
+            llm, tts = await build_providers(env, settings_repo, selection)
+        except ProviderConfigurationError as e:
+            logger.error("provider_configuration_error", error=str(e))
+            sys.exit(1)
 
-    result, metrics = await pipeline.process(request)
+        await tts.start()
+
+        try:
+            language = await settings_repo.get_or_default(
+                "language", LanguageSettings, LanguageSettings()
+            )
+            narrator = await settings_repo.get_or_default(
+                "narrator", NarratorSettings, NarratorSettings()
+            )
+            prompts = await settings_repo.get_or_default(
+                "prompts", PromptSettings, PromptSettings()
+            )
+
+            pipeline = NarrationPipeline(llm_provider=llm, tts_provider=tts)
+
+            health = await pipeline.health_check()
+            if not health["pipeline"]:
+                logger.error("Pipeline health check failed", health=health)
+                sys.exit(1)
+
+            logger.info("Pipeline ready", health=health)
+
+            try:
+                narrator_style = NarratorStyle(style)
+            except ValueError:
+                logger.warning(f"Unknown style '{style}', using default")
+                narrator_style = NarratorStyle.DEFAULT
+
+            request = NarrationRequest(
+                user=user,
+                message=message,
+                style=narrator_style,
+            )
+
+            logger.info("Processing narration...", user=user, message=message[:50])
+
+            result, metrics = await pipeline.process(
+                request,
+                narrator_lang=language.narrator_lang,
+                subtitle_lang=language.subtitle_lang,
+                auto_translate=narrator.auto_translate,
+                bypass_llm=narrator.bypass_llm,
+                enable_moderation=narrator.enable_moderation,
+                custom_prompt=narrator.system_prompt,
+                prompts=prompts,
+            )
+        finally:
+            await tts.close()
+            await llm.close()
+    finally:
+        await db.close()
 
     logger.info(
         "Narration complete",
         voice_text=result.voice_text,
         duration_ms=result.duration_ms,
+        moderation_latency_ms=metrics.moderation_latency_ms,
         llm_latency_ms=metrics.llm_latency_ms,
         tts_latency_ms=metrics.tts_latency_ms,
         total_latency_ms=metrics.total_latency_ms,
     )
 
-    # Save audio
     if output_path is None:
         output_path = Path("output.wav")
 
     output_path.write_bytes(result.audio_data)
     logger.info("Audio saved", path=str(output_path), size=len(result.audio_data))
 
-    # Print the formatted text
     print("\n" + "=" * 60)
     print("NARRATOR:")
     print(result.voice_text)
@@ -310,6 +365,18 @@ def main() -> None:
         help="Output audio file path (default: output.wav)",
     )
     cli_parser.add_argument(
+        "--llm-provider",
+        default=None,
+        choices=[p.value for p in LLMProviderName],
+        help="Override the configured LLM provider for this run",
+    )
+    cli_parser.add_argument(
+        "--tts-provider",
+        default=None,
+        choices=[p.value for p in TTSProviderName],
+        help="Override the configured TTS provider for this run",
+    )
+    cli_parser.add_argument(
         "--log-level",
         "-l",
         default="info",
@@ -338,6 +405,8 @@ def main() -> None:
                 user=args.user,
                 style=args.style,
                 output_path=args.output,
+                llm_provider=args.llm_provider,
+                tts_provider=args.tts_provider,
             )
         )
     else:
