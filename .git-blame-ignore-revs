@@ -1,0 +1,9 @@
+# Revisions to skip when running git blame.
+#
+# Configure once per clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub applies this file automatically.
+
+# Format the repository with ruff format
+73f5336d0213be8a6c599bd52e1dc77d89cc50a1

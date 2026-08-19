@@ -42,7 +42,7 @@ uv run ruff check .
 # Auto-fix lint issues
 uv run ruff check --fix .
 
-# Format code
+# Format code (CI enforces `ruff format --check .`)
 uv run ruff format .
 ```
 
