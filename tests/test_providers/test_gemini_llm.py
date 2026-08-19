@@ -60,7 +60,7 @@ class TestGeminiLLMProviderConstruction:
         provider = GeminiLLMProvider(api_key=mock_api_key)
 
         assert provider.name == "gemini"
-        assert provider._model == "gemini-2.5-flash"
+        assert provider._model == "gemini-3.6-flash"
         assert provider._temperature == 0.8
         assert provider._max_output_tokens == 500
         assert provider._thinking_budget == 0
@@ -203,7 +203,7 @@ class TestGeminiLLMMetadata:
 
         assert len(models) > 0
         assert all(isinstance(m, Model) for m in models)
-        assert any(m.id == "gemini-2.5-flash" for m in models)
+        assert any(m.id == "gemini-3.6-flash" for m in models)
 
     def test_settings_schema(self, mock_api_key: SecretStr) -> None:
         """The UI schema exposes every constructor knob."""

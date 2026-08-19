@@ -3,8 +3,10 @@
 import pytest
 from pydantic import SecretStr
 
+from src.models.settings import GeminiLLMSettings, GroqLLMSettings, PiperSettings
 from src.providers.llm.gemini import GeminiLLMProvider
-from src.providers.tts.gemini import GeminiTTSProvider
+from src.providers.llm.groq import GroqLLMProvider
+from src.providers.tts.gemini import GeminiTTSProvider, GeminiTTSSettings
 from src.providers.tts.piper import PiperTTSProvider
 from src.views.schema_form import (
     FieldKind,
@@ -183,3 +185,32 @@ class TestRealProviderSchemas:
         names = [field.name for field in build_fields(provider.get_settings_schema(), {})]
 
         assert names == ["voice", "length_scale", "noise_scale", "noise_w"]
+
+    def test_schema_defaults_match_the_settings_models(self) -> None:
+        """A form with nothing stored must show what the settings model would use.
+
+        The schema carries its own "default" strings, so a value changed in one
+        place and not the other would render a form that disagrees with what the
+        app actually runs with.
+        """
+        pairs = [
+            (
+                GeminiLLMProvider(api_key=SecretStr("test")).get_settings_schema(),
+                GeminiLLMSettings(),
+            ),
+            (GroqLLMProvider(api_key=SecretStr("test")).get_settings_schema(), GroqLLMSettings()),
+            (
+                GeminiTTSProvider(api_key=SecretStr("test")).get_settings_schema(),
+                GeminiTTSSettings(),
+            ),
+            (PiperTTSProvider().get_settings_schema(), PiperSettings()),
+        ]
+
+        for schema, settings in pairs:
+            for field in build_fields(schema, {}):
+                configured = getattr(settings, field.name)
+                expected = "" if configured is None else str(configured)
+                assert field.value == expected, (
+                    f"{type(settings).__name__}.{field.name}: schema default "
+                    f"{field.value!r} != settings default {expected!r}"
+                )
