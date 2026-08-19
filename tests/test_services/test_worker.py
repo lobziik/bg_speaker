@@ -1,13 +1,18 @@
 """Tests for the QueueWorker service."""
 
 import asyncio
+from collections.abc import AsyncIterator
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 
 from src.api.websocket import WebSocketManager
+from src.db.manager import DatabaseManager
+from src.db.repositories.settings import SettingsRepository
 from src.models.narration import LanguageCode, NarrationRequest, NarrationResult
-from src.models.settings import QueueSettings
+from src.models.settings import LanguageSettings, QueueSettings, TTSVoiceSettings
 from src.services.pipeline import NarrationPipeline, PipelineMetrics
 from src.services.queue import NarrationQueue
 from src.services.rate_limiter import RateLimiter
@@ -484,3 +489,75 @@ class TestWorkerPipelineSwap:
         await worker.stop()
 
         assert worker._pipeline is replacement
+
+
+class TestVoiceOverrideScoping:
+    """Per-language voice overrides belong to Piper and must not leak."""
+
+    @pytest_asyncio.fixture
+    async def db(self, tmp_path: Path) -> AsyncIterator[DatabaseManager]:
+        """A database holding a Piper voice override for English."""
+        manager = DatabaseManager(db_path=tmp_path / "data" / "narrator.db")
+        await manager.initialize()
+        repo = SettingsRepository(manager.connection)
+        await repo.set(
+            "tts_voice",
+            TTSVoiceSettings(voice_overrides={LanguageCode.EN: "en_US-amy-medium"}),
+        )
+        await repo.set("language", LanguageSettings(narrator_lang=LanguageCode.EN))
+        try:
+            yield manager
+        finally:
+            await manager.close()
+
+    async def _run_one(
+        self,
+        db: DatabaseManager,
+        queue: NarrationQueue,
+        mock_pipeline: MagicMock,
+        mock_ws_manager: MagicMock,
+        tts_provider_name: str,
+    ) -> object:
+        """Process a single item and return the voice_id handed to the pipeline."""
+        mock_pipeline.tts_provider_name = tts_provider_name
+        mock_pipeline.llm_provider_name = "groq"
+
+        worker = QueueWorker(
+            queue=queue,
+            pipeline=mock_pipeline,
+            ws_manager=mock_ws_manager,
+            db_connection=db.connection,
+        )
+
+        await worker.start()
+        await queue.add(user="TestUser", message="A sword!")
+        await asyncio.sleep(0.3)
+        await worker.stop()
+
+        return mock_pipeline.process.call_args.kwargs["voice_id"]
+
+    @pytest.mark.asyncio
+    async def test_piper_receives_the_override(
+        self,
+        db: DatabaseManager,
+        queue: NarrationQueue,
+        mock_pipeline: MagicMock,
+        mock_ws_manager: MagicMock,
+    ) -> None:
+        """With Piper active the stored override is used."""
+        voice_id = await self._run_one(db, queue, mock_pipeline, mock_ws_manager, "piper")
+
+        assert voice_id == "en_US-amy-medium"
+
+    @pytest.mark.asyncio
+    async def test_other_provider_does_not_receive_piper_voices(
+        self,
+        db: DatabaseManager,
+        queue: NarrationQueue,
+        mock_pipeline: MagicMock,
+        mock_ws_manager: MagicMock,
+    ) -> None:
+        """A Piper voice ID would make every Gemini narration fail validation."""
+        voice_id = await self._run_one(db, queue, mock_pipeline, mock_ws_manager, "gemini")
+
+        assert voice_id is None

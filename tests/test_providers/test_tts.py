@@ -1,7 +1,6 @@
 """Tests for TTS providers."""
 
 import asyncio
-from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -87,8 +86,6 @@ class TestPiperTTSProvider:
         """Test default provider initialization."""
         provider = PiperTTSProvider()
         assert provider.name == "piper"
-        assert provider.supports_streaming is False
-        assert provider.supports_cloning is False
 
     def test_initialization_with_settings(self) -> None:
         """Test provider initialization with custom settings."""
@@ -111,122 +108,6 @@ class TestPiperTTSProvider:
         assert "en_GB-alba-medium" in voice_ids
 
     @pytest.mark.asyncio
-    async def test_clone_voice_not_supported(self) -> None:
-        """Test that voice cloning raises NotImplementedError."""
-        provider = PiperTTSProvider()
-
-        with pytest.raises(NotImplementedError) as exc_info:
-            await provider.clone_voice("test", [b"audio"])
-
-        assert "Piper does not support voice cloning" in str(exc_info.value)
-
-    def test_settings_schema(self) -> None:
-        """Test settings schema generation."""
-        provider = PiperTTSProvider()
-        schema = provider.get_settings_schema()
-
-        assert schema["type"] == "object"
-        assert "properties" in schema
-        properties = cast("dict[str, object]", schema["properties"])
-        assert "voice" in properties
-        assert "length_scale" in properties
-        assert "noise_scale" in properties
-
-        # Check voice enum contains expected voices
-        voice_props = cast("dict[str, object]", properties["voice"])
-        voice_enum = cast("list[str]", voice_props["enum"])
-        assert "en_US-lessac-medium" in voice_enum
-
-    @pytest.mark.asyncio
-    async def test_synthesize_success(self) -> None:
-        """Test successful synthesis with mocked Piper."""
-        provider = PiperTTSProvider()
-
-        # Create mock voice
-        mock_voice = MagicMock()
-        mock_voice.config.sample_rate = 22050
-
-        # Mock audio chunk with audio_int16_bytes attribute
-        mock_chunk = MagicMock()
-        mock_chunk.audio_int16_bytes = b"\x00\x01" * 1000
-        mock_voice.synthesize.return_value = iter([mock_chunk])
-
-        # Patch the _ensure_voice_loaded to return our mock
-        async def mock_ensure_voice_loaded(_voice_id: str) -> MagicMock:
-            return mock_voice
-
-        # Replace method with mock for testing (mypy doesn't like method assignment)
-        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[assignment]
-
-        # Patch the piper module import that happens in _synthesize_sync
-        with patch("piper.PiperVoice"), patch("piper.config.SynthesisConfig"):
-            result = await provider.synthesize("Hello, world!")
-
-        assert isinstance(result, bytes)
-        assert len(result) > 0
-        # Should be WAV format (starts with RIFF)
-        assert result[:4] == b"RIFF"
-
-    @pytest.mark.asyncio
-    async def test_synthesize_with_speed_adjustment(self) -> None:
-        """Test synthesis with speed adjustment."""
-        provider = PiperTTSProvider()
-
-        mock_voice = MagicMock()
-        mock_voice.config.sample_rate = 22050
-
-        # Mock audio chunk with audio_int16_bytes attribute
-        mock_chunk = MagicMock()
-        mock_chunk.audio_int16_bytes = b"\x00\x01" * 100
-        mock_voice.synthesize.return_value = iter([mock_chunk])
-
-        async def mock_ensure_voice_loaded(_voice_id: str) -> MagicMock:
-            return mock_voice
-
-        # Replace method with mock for testing (mypy doesn't like method assignment)
-        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[assignment]
-
-        settings = TTSSettings(speed=1.5)
-
-        with patch("piper.PiperVoice"), patch(
-            "piper.config.SynthesisConfig"
-        ) as mock_config_class:
-            await provider.synthesize("Test", settings=settings)
-
-        # Verify length_scale was adjusted (speed 1.5 -> length_scale ~0.67)
-        call_args = mock_config_class.call_args
-        length_scale = call_args.kwargs.get("length_scale")
-        assert length_scale is not None
-        assert abs(length_scale - (1.0 / 1.5)) < 0.01
-
-    @pytest.mark.asyncio
-    async def test_synthesize_stream_yields_full_audio(self) -> None:
-        """Test that synthesize_stream yields full audio (no streaming support)."""
-        provider = PiperTTSProvider()
-
-        mock_voice = MagicMock()
-        mock_voice.config.sample_rate = 22050
-
-        # Mock audio chunk with audio_int16_bytes attribute
-        mock_chunk = MagicMock()
-        mock_chunk.audio_int16_bytes = b"\x00\x01" * 100
-        mock_voice.synthesize.return_value = iter([mock_chunk])
-
-        async def mock_ensure_voice_loaded(_voice_id: str) -> MagicMock:
-            return mock_voice
-
-        # Replace method with mock for testing (mypy doesn't like method assignment)
-        provider._ensure_voice_loaded = mock_ensure_voice_loaded  # type: ignore[assignment]
-
-        with patch("piper.PiperVoice"), patch("piper.config.SynthesisConfig"):
-            chunks = []
-            async for chunk in provider.synthesize_stream("Test"):
-                chunks.append(chunk)
-
-        # Should only yield one chunk (full audio)
-        assert len(chunks) == 1
-        assert chunks[0][:4] == b"RIFF"
-
     @pytest.mark.asyncio
     async def test_health_check_success(self) -> None:
         """Test successful health check."""

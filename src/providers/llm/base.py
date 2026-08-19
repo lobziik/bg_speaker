@@ -1,6 +1,5 @@
 """LLM Provider protocol and base types."""
 
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
@@ -14,7 +13,6 @@ class Model:
     id: str
     name: str
     context_length: int
-    supports_streaming: bool
 
 
 class LLMNarrationResponse(StrictModel):
@@ -191,23 +189,6 @@ class LLMProvider(Protocol):
 
         Raises:
             LLMResponseParseError: If response cannot be parsed as ModerationResult.
-        """
-        ...
-
-    def generate_stream(
-        self,
-        user: str,
-        message: str,
-        system_prompt: str,
-        style: str = "default",
-    ) -> AsyncIterator[str]:
-        """Streaming generation (optional).
-
-        Note: Implementations should be async generators (async def with yield).
-        The return type is AsyncIterator to match async generator behavior.
-
-        Yields:
-            Text chunks as they're generated
         """
         ...
 

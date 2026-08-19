@@ -5,6 +5,7 @@
 {% block header %}Settings{% endblock %}
 
 {% block content %}
+{% from "partials/settings_field.html" import render_field %}
 <div class="tabs">
     <a href="#language" class="tab active" onclick="showTab('language', this)">Language</a>
     <a href="#providers" class="tab" onclick="showTab('providers', this)">Providers</a>
@@ -114,192 +115,49 @@
         </div>
     </form>
 
-    <!-- Groq LLM -->
+    {# One section per provider, built from its own get_settings_schema(). #}
+    {% for form in provider_forms %}
     <div class="form-section" style="margin-top: 2rem;">
-        <div class="form-section-title">Groq (LLM)</div>
-        <form hx-post="/settings/providers/groq_llm"
-              hx-target="#toast-container"
-              hx-swap="innerHTML">
+        <div class="form-section-title">
+            {{ form.title }}{% if form.active %} <span class="badge">active</span>{% endif %}
+        </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="groq_model">Model</label>
-                    <select name="model" id="groq_model">
-                        {% for model in groq_models %}
-                        <option value="{{ model.id }}" {% if groq_llm.model == model.id %}selected{% endif %}>
-                            {{ model.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="groq_temperature">Temperature</label>
-                    <div class="range-container">
-                        <input type="range" name="temperature" id="groq_temperature"
-                               min="0" max="2" step="0.1" value="{{ groq_llm.temperature }}">
-                        <span class="range-value">{{ groq_llm.temperature }}</span>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="groq_max_tokens">Max Tokens</label>
-                    <input type="number" name="max_tokens" id="groq_max_tokens"
-                           min="50" max="2000" value="{{ groq_llm.max_tokens }}">
-                </div>
-            </div>
-
-            <div class="btn-group">
-                <button type="submit" class="btn btn-primary">Save Groq Settings</button>
-            </div>
-        </form>
-    </div>
-
-    <!-- Gemini LLM -->
-    <div class="form-section" style="margin-top: 2rem;">
-        <div class="form-section-title">Gemini (LLM)</div>
-        {% if "gemini" not in available_llm %}
+        {% if not form.configured %}
         <p class="help-text">
-            Set GEMINI_API_KEY in the environment to enable this provider.
-            Settings below are still saved for later.
+            Not configured - set this provider's API key in the environment to enable it.
         </p>
-        {% endif %}
-        <form hx-post="/settings/providers/gemini_llm"
+        {% else %}
+        <form hx-post="/settings/providers/{{ form.key }}"
               hx-target="#toast-container"
               hx-swap="innerHTML">
 
             <div class="form-row">
-                <div class="form-group">
-                    <label for="gemini_model">Model</label>
-                    <select name="model" id="gemini_model">
-                        {% for model in gemini_models %}
-                        <option value="{{ model.id }}" {% if gemini_llm.model == model.id %}selected{% endif %}>
-                            {{ model.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="gemini_temperature">Temperature</label>
-                    <div class="range-container">
-                        <input type="range" name="temperature" id="gemini_temperature"
-                               min="0" max="2" step="0.1" value="{{ gemini_llm.temperature }}">
-                        <span class="range-value">{{ gemini_llm.temperature }}</span>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="gemini_max_output_tokens">Max Output Tokens</label>
-                    <input type="number" name="max_output_tokens" id="gemini_max_output_tokens"
-                           min="50" max="2000" value="{{ gemini_llm.max_output_tokens }}">
-                </div>
+                {% for field in form.fields if field.kind != "textarea" %}
+                {{ render_field(field, form.key) }}
+                {% endfor %}
             </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="gemini_thinking_budget">Thinking Budget</label>
-                    <input type="number" name="thinking_budget" id="gemini_thinking_budget"
-                           min="-1" max="24576"
-                           value="{{ gemini_llm.thinking_budget if gemini_llm.thinking_budget is not none else '' }}">
-                    <small class="help-text">
-                        0 = no thinking, lowest latency (2.5 Flash / Flash-Lite only).
-                        -1 = model decides. Empty = model default; required for 2.5 Pro and 2.0 Flash.
-                    </small>
-                </div>
-
-                <div class="form-group">
-                    <label for="gemini_safety_threshold">Safety Threshold</label>
-                    <select name="safety_threshold" id="gemini_safety_threshold">
-                        {% for threshold in safety_thresholds %}
-                        <option value="{{ threshold.value }}"
-                                {% if gemini_llm.safety_threshold.value == threshold.value %}selected{% endif %}>
-                            {{ threshold.value }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                    <small class="help-text">
-                        Google's own filter. BLOCK_ONLY_HIGH lets fantasy combat through while the
-                        bot's moderation step still enforces Twitch policy.
-                    </small>
-                </div>
-            </div>
+            {% for field in form.fields if field.kind == "textarea" %}
+            {{ render_field(field, form.key) }}
+            {% endfor %}
 
             <div class="btn-group">
-                <button type="submit" class="btn btn-primary">Save Gemini LLM Settings</button>
-            </div>
-        </form>
-    </div>
-
-    <!-- Gemini TTS -->
-    <div class="form-section" style="margin-top: 2rem;">
-        <div class="form-section-title">Gemini (TTS)</div>
-        {% if "gemini" not in available_tts %}
-        <p class="help-text">
-            Set GEMINI_API_KEY in the environment to enable this provider.
-            Settings below are still saved for later.
-        </p>
-        {% endif %}
-        <form hx-post="/settings/providers/gemini_tts"
-              hx-target="#toast-container"
-              hx-swap="innerHTML">
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="gemini_tts_model">TTS Model</label>
-                    <select name="model" id="gemini_tts_model">
-                        {% for model in gemini_tts_models %}
-                        <option value="{{ model }}" {% if gemini_tts.model == model %}selected{% endif %}>
-                            {{ model }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="gemini_tts_voice">Voice</label>
-                    <select name="voice_name" id="gemini_tts_voice">
-                        {% for voice in gemini_voices %}
-                        <option value="{{ voice.id }}" {% if gemini_tts.voice_name == voice.id %}selected{% endif %}>
-                            {{ voice.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                    <small class="help-text">All voices are multilingual - language follows the text.</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="gemini_tts_temperature">Temperature</label>
-                    <div class="range-container">
-                        <input type="range" name="temperature" id="gemini_tts_temperature"
-                               min="0" max="2" step="0.1" value="{{ gemini_tts.temperature }}">
-                        <span class="range-value">{{ gemini_tts.temperature }}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="gemini_tts_style_prompt">Style Direction</label>
-                <textarea name="style_prompt" id="gemini_tts_style_prompt" rows="3">{{ gemini_tts.style_prompt }}</textarea>
-                <small class="help-text">
-                    Gemini TTS has no speed or pitch sliders - delivery is directed in plain language,
-                    e.g. "Read this as a hushed, conspiratorial narrator".
-                </small>
-            </div>
-
-            <div class="btn-group">
-                <button type="submit" class="btn btn-primary">Save Gemini TTS Settings</button>
-                {% if not active_tts_is_piper %}
+                <button type="submit" class="btn btn-primary">Save {{ form.title }}</button>
+                {% if form.supports_voice_test %}
                 <button type="button" class="btn btn-secondary"
-                        hx-post="/settings/tts_provider/test"
-                        hx-target="#gemini-tts-test-result">
+                        hx-post="/settings/providers/test_voice"
+                        hx-include="closest form"
+                        hx-target="#voice-test-result">
                     Test Voice
                 </button>
                 {% endif %}
             </div>
         </form>
-        <div id="gemini-tts-test-result" style="margin-top: 1rem;"></div>
+        {% endif %}
     </div>
+    {% endfor %}
+
+    <div id="voice-test-result" style="margin-top: 1rem;"></div>
 </div>
 
 <div id="tab-tts_voice" class="card tab-content" style="display: none;">
@@ -308,13 +166,14 @@
           hx-target="#toast-container"
           hx-swap="innerHTML">
         <p class="help-text" style="margin-bottom: 1rem;">
-            Select which Piper TTS voice to use for each language. The voice will be automatically
-            selected based on the Narrator Language setting.
+            Which Piper voice to use for each language. The voice follows the Narrator Language
+            setting. Speed and variation live on the Providers tab, with the rest of Piper's
+            settings.
         </p>
-        {% if not active_tts_is_piper %}
+        {% if providers.tts.value != "piper" %}
         <p class="help-text">
-            Piper is not the active TTS provider - these settings are stored and take effect
-            when you switch back to Piper on the Providers tab.
+            Piper is not the active TTS provider - these overrides are stored and take effect
+            when you switch back to Piper. Gemini picks its voice on the Providers tab.
         </p>
         {% endif %}
 
@@ -339,52 +198,6 @@
             <button type="submit" class="btn btn-primary">Save TTS Voice Settings</button>
         </div>
     </form>
-
-    <!-- Sound Quality Section -->
-    <div class="form-section" style="margin-top: 2rem;">
-        <div class="form-section-title">Sound Quality</div>
-        <form hx-post="/settings/tts_provider"
-              hx-target="#toast-container"
-              hx-swap="innerHTML">
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="length_scale">Speech Speed</label>
-                    <div class="range-container">
-                        <input type="range" name="length_scale" id="length_scale"
-                               min="0.5" max="2.0" step="0.1"
-                               value="{{ piper.length_scale }}">
-                        <span class="range-value">{{ piper.length_scale }}</span>
-                    </div>
-                    <small class="help-text">0.5 = fast, 1.0 = normal, 2.0 = slow</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="noise_scale">Pronunciation Variation</label>
-                    <div class="range-container">
-                        <input type="range" name="noise_scale" id="noise_scale"
-                               min="0.0" max="1.0" step="0.05"
-                               value="{{ piper.noise_scale }}">
-                        <span class="range-value">{{ piper.noise_scale }}</span>
-                    </div>
-                    <small class="help-text">0 = monotone, 1 = varied</small>
-                </div>
-            </div>
-
-            <input type="hidden" name="noise_w" value="{{ piper.noise_w }}">
-
-            <div class="btn-group">
-                <button type="submit" class="btn btn-primary">Save TTS Settings</button>
-                <button type="button" class="btn btn-secondary"
-                        hx-post="/settings/tts_provider/test"
-                        hx-include="closest form"
-                        hx-target="#tts-test-result">
-                    Test Voice
-                </button>
-            </div>
-        </form>
-        <div id="tts-test-result" style="margin-top: 1rem;"></div>
-    </div>
 </div>
 
 <!-- Narrator Settings -->

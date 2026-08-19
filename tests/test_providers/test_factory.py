@@ -138,7 +138,7 @@ class TestBuildTTSProvider:
         )
 
         assert isinstance(provider, PiperTTSProvider)
-        assert provider.current_settings()[0] == 1.3
+        assert provider._settings.length_scale == 1.3
 
     def test_builds_gemini(self) -> None:
         """Gemini TTS is built with the stored voice."""

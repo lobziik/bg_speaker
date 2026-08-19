@@ -55,8 +55,6 @@ class TestGeminiTTSConstruction:
         provider = GeminiTTSProvider(api_key=mock_api_key)
 
         assert provider.name == "gemini"
-        assert provider.supports_streaming is False
-        assert provider.supports_cloning is False
         assert provider._settings.model == "gemini-2.5-flash-preview-tts"
         assert provider._settings.voice_name == "Charon"
 
@@ -188,14 +186,6 @@ class TestGeminiTTSUnsupportedFeatures:
 
         with pytest.raises(ValueError, match="does not support speed"):
             await provider.synthesize("hello", settings=TTSSettings(speed=1.5))
-
-    @pytest.mark.asyncio
-    async def test_clone_voice_raises(self, mock_api_key: SecretStr) -> None:
-        """Voice cloning is not offered by Gemini TTS."""
-        provider = GeminiTTSProvider(api_key=mock_api_key)
-
-        with pytest.raises(NotImplementedError, match="voice cloning"):
-            await provider.clone_voice("custom", [b"audio"])
 
 
 class TestGeminiTTSPrompt:

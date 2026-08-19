@@ -16,7 +16,6 @@ from src.core.types import StrictModel
 from src.providers.tts.base import TTSProvider, TTSSettings, Voice
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
 
     from src.models.narration import LanguageCode
 
@@ -156,16 +155,6 @@ class GeminiTTSProvider:
     def name(self) -> str:
         """Provider display name."""
         return "gemini"
-
-    @property
-    def supports_streaming(self) -> bool:
-        """Audio is returned as a single blob."""
-        return False
-
-    @property
-    def supports_cloning(self) -> bool:
-        """Gemini TTS exposes prebuilt voices only."""
-        return False
 
     async def start(self) -> None:
         """No-op: the Gemini client needs no warm-up.
@@ -412,42 +401,9 @@ class GeminiTTSProvider:
 
         return audio_bytes
 
-    async def synthesize_stream(
-        self,
-        text: str,
-        voice_id: str | None = None,
-        settings: TTSSettings | None = None,
-        language: LanguageCode | None = None,
-    ) -> AsyncIterator[bytes]:
-        """Streaming not supported - yields the full audio in one chunk.
-
-        Yields:
-            The complete WAV audio.
-        """
-        audio = await self.synthesize(text, voice_id, settings, language)
-        yield audio
-
     async def list_voices(self) -> list[Voice]:
         """List the prebuilt Gemini voices."""
         return GEMINI_VOICES.copy()
-
-    async def clone_voice(
-        self,
-        name: str,
-        audio_files: list[bytes],
-    ) -> Voice:
-        """Voice cloning is not offered by Gemini TTS.
-
-        Args:
-            name: Unused.
-            audio_files: Unused.
-
-        Raises:
-            NotImplementedError: Always.
-        """
-        raise NotImplementedError(
-            "Gemini TTS does not support voice cloning. Use ElevenLabs for voice cloning."
-        )
 
     async def health_check(self) -> bool:
         """Check that the configured TTS model is reachable."""
@@ -484,6 +440,7 @@ class GeminiTTSProvider:
                 },
                 "style_prompt": {
                     "type": "string",
+                    "format": "textarea",
                     "title": "Style Direction",
                     "description": (
                         "Natural-language delivery direction prepended to the text - "

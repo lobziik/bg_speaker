@@ -19,7 +19,6 @@ from src.providers.llm.base import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
 
     from groq.types.chat import (
         ChatCompletionSystemMessageParam,
@@ -50,25 +49,21 @@ class GroqLLMProvider:
             id="llama-3.3-70b-versatile",
             name="Llama 3.3 70B Versatile",
             context_length=128000,
-            supports_streaming=True,
         ),
         Model(
             id="llama-3.1-8b-instant",
             name="Llama 3.1 8B Instant",
             context_length=128000,
-            supports_streaming=True,
         ),
         Model(
             id="mixtral-8x7b-32768",
             name="Mixtral 8x7B",
             context_length=32768,
-            supports_streaming=True,
         ),
         Model(
             id="gemma2-9b-it",
             name="Gemma 2 9B",
             context_length=8192,
-            supports_streaming=True,
         ),
     ]
 
@@ -363,67 +358,6 @@ class GroqLLMProvider:
         )
 
         return result
-
-    async def generate_stream(
-        self,
-        user: str,
-        message: str,
-        system_prompt: str,
-        style: str = "default",
-    ) -> AsyncIterator[str]:
-        """Streaming generation.
-
-        Yields:
-            Text chunks as they're generated
-        """
-        logger.debug(
-            "groq_stream_start",
-            user=user,
-            model=self._model,
-            style=style,
-            input_length=len(message),
-        )
-
-        user_content = f"[{user}]: {message}"
-
-        if style != "default":
-            user_content = f"[Style: {style}] {user_content}"
-
-        try:
-            system_msg: ChatCompletionSystemMessageParam = {
-                "role": "system",
-                "content": system_prompt,
-            }
-            user_msg: ChatCompletionUserMessageParam = {
-                "role": "user",
-                "content": user_content,
-            }
-            stream = await self._client.chat.completions.create(
-                model=self._model,
-                messages=[system_msg, user_msg],
-                temperature=self._temperature,
-                max_tokens=self._max_tokens,
-                stream=True,
-            )
-        except APIConnectionError as e:
-            logger.error("groq_stream_connection_error", user=user, error=str(e))
-            raise
-        except APIStatusError as e:
-            logger.error(
-                "groq_stream_api_error",
-                user=user,
-                status_code=e.status_code,
-                error=str(e),
-            )
-            raise
-
-        chunk_count = 0
-        async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                chunk_count += 1
-                yield chunk.choices[0].delta.content
-
-        logger.debug("groq_stream_complete", user=user, chunk_count=chunk_count)
 
     async def list_models(self) -> list[Model]:
         """List available models."""

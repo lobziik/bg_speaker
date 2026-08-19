@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 import structlog
 from google import genai
@@ -20,9 +20,6 @@ from src.providers.llm.base import (
     Model,
     ModerationResult,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
 
 logger = structlog.get_logger()
 
@@ -89,25 +86,21 @@ class GeminiLLMProvider:
             id="gemini-2.5-flash",
             name="Gemini 2.5 Flash",
             context_length=1_048_576,
-            supports_streaming=True,
         ),
         Model(
             id="gemini-2.5-flash-lite",
             name="Gemini 2.5 Flash Lite",
             context_length=1_048_576,
-            supports_streaming=True,
         ),
         Model(
             id="gemini-2.5-pro",
             name="Gemini 2.5 Pro",
             context_length=1_048_576,
-            supports_streaming=True,
         ),
         Model(
             id="gemini-2.0-flash",
             name="Gemini 2.0 Flash",
             context_length=1_048_576,
-            supports_streaming=True,
         ),
     ]
 
@@ -552,54 +545,6 @@ class GeminiLLMProvider:
         )
 
         return result
-
-    async def generate_stream(
-        self,
-        user: str,
-        message: str,
-        system_prompt: str,
-        style: str = "default",
-    ) -> AsyncIterator[str]:
-        """Streaming generation.
-
-        Yields:
-            Text chunks as they're generated.
-
-        Raises:
-            genai_errors.APIError: If the Gemini API call fails.
-        """
-        logger.debug(
-            "gemini_stream_start",
-            user=user,
-            model=self._model,
-            style=style,
-            input_length=len(message),
-        )
-
-        user_content = f"[{user}]: {message}"
-        if style != "default":
-            user_content = f"[Style: {style}] {user_content}"
-
-        try:
-            stream = await self._client.aio.models.generate_content_stream(
-                model=self._model,
-                contents=user_content,
-                config=self._build_config(system_prompt, NARRATION_RESPONSE_SCHEMA),
-            )
-        except genai_errors.ClientError as e:
-            logger.error("gemini_stream_client_error", user=user, code=e.code, error=e.message)
-            raise
-        except genai_errors.ServerError as e:
-            logger.error("gemini_stream_server_error", user=user, code=e.code, error=e.message)
-            raise
-
-        chunk_count = 0
-        async for chunk in stream:
-            if chunk.text:
-                chunk_count += 1
-                yield chunk.text
-
-        logger.debug("gemini_stream_complete", user=user, chunk_count=chunk_count)
 
     async def list_models(self) -> list[Model]:
         """List available models."""

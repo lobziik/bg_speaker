@@ -1,6 +1,5 @@
 """TTS Provider protocol and base types."""
 
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -41,16 +40,6 @@ class TTSProvider(Protocol):
         """Provider display name."""
         ...
 
-    @property
-    def supports_streaming(self) -> bool:
-        """Whether provider supports audio streaming."""
-        ...
-
-    @property
-    def supports_cloning(self) -> bool:
-        """Whether provider supports voice cloning."""
-        ...
-
     async def start(self) -> None:
         """Start any background work the provider needs.
 
@@ -87,39 +76,8 @@ class TTSProvider(Protocol):
         """
         ...
 
-    def synthesize_stream(
-        self,
-        text: str,
-        voice_id: str | None = None,
-        settings: TTSSettings | None = None,
-        language: "LanguageCode | None" = None,
-    ) -> AsyncIterator[bytes]:
-        """Streaming audio synthesis.
-
-        Note: Implementations should be async generators (async def with yield).
-        The return type is AsyncIterator to match async generator behavior.
-
-        Args:
-            text: Text to synthesize
-            voice_id: Voice identifier (optional, uses default)
-            settings: TTS settings (optional)
-            language: Target language for automatic voice selection (optional)
-
-        Yields:
-            Audio chunks as they're generated
-        """
-        ...
-
     async def list_voices(self) -> list[Voice]:
         """List available voices."""
-        ...
-
-    async def clone_voice(
-        self,
-        name: str,
-        audio_files: list[bytes],
-    ) -> Voice:
-        """Clone a voice from audio samples (if supported)."""
         ...
 
     async def health_check(self) -> bool:

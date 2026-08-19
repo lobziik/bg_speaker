@@ -53,9 +53,34 @@ All external services (LLM, TTS) use Protocol-based abstraction in `src/provider
 - `LLMProvider` protocol: Groq (`GROQ_API_KEY`), Gemini (`GEMINI_API_KEY`)
 - `TTSProvider` protocol: Piper (local, MIT licensed, CPU-friendly), Gemini (`GEMINI_API_KEY`)
 
-Providers implement `get_settings_schema()` returning JSON Schema for dynamic Web UI form generation.
-Both protocols include `close()`; `TTSProvider` also includes `start()`, so the app lifecycle can
-treat every provider the same when swapping them at runtime.
+Every method on the protocols is called by the application - there is no speculative surface.
+Streaming, voice cloning and the `supports_*` flags were removed because nothing could use them:
+the narration JSON contract makes partial LLM output unusable, and streaming audio to the overlay
+needs a chunked WebSocket protocol that does not exist yet.
+
+- `get_settings_schema()` renders the provider's form on the Providers tab (see below).
+- `list_models()` / `list_voices()` fill the model and voice dropdowns, so a provider's catalogue
+  has one source of truth.
+- Both protocols include `close()`; `TTSProvider` also includes `start()`, so the app lifecycle can
+  treat every provider the same when swapping them at runtime.
+
+### Schema-Driven Settings Forms
+`src/views/schema_form.py` is the only place that interprets a provider schema. It parses the
+JSON Schema into typed `SettingsField` objects, which `partials/settings_field.html` renders; the
+templates never inspect the schema themselves. A new provider therefore gets a settings form for
+free - implement `get_settings_schema()` and add it to `LLM_FORM_SPECS` / `TTS_FORM_SPECS`.
+
+- The supported subset is small on purpose (string, string+enum, number, integer, `X | null`, and
+  `"format": "textarea"`). Anything else raises `SchemaError` rather than rendering a wrong widget.
+- The settings view builds one instance per configured provider to read its schema and catalogue,
+  then closes the throwaways. Constructors perform no network I/O.
+- Bounds declared in the schema are enforced twice: the browser gets `min`/`max`, and the Pydantic
+  settings model rejects anything that still arrives, reported as a toast rather than a 500.
+
+### Per-Language Voice Overrides Are Piper-Only
+`TTSVoiceSettings.voice_overrides` holds Piper voice IDs. The worker only applies them while
+`pipeline.tts_provider_name` is `piper` - handing `en_US-amy-medium` to Gemini TTS would fail
+voice validation on every narration in that language and refund the points.
 
 Only implemented providers are ever offered: `EnvSettings.get_available_llm_providers()` /
 `get_available_tts_providers()` report exactly what the factory can build.
