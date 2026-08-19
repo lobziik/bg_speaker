@@ -75,19 +75,29 @@ check_runtime() {
     fi
 }
 
-install_podman() {
+detect_distro_id() {
+    # Read /etc/os-release in a subshell: it defines its own VERSION, which
+    # would otherwise overwrite this script's and end up in the image tag.
     if [[ ! -f /etc/os-release ]]; then
+        return 0
+    fi
+    # shellcheck source=/dev/null
+    ( . /etc/os-release && echo "$ID" )
+}
+
+install_podman() {
+    local distro
+    distro=$(detect_distro_id)
+
+    if [[ -z "$distro" ]]; then
         error "Cannot detect distribution. Install podman manually."
         echo "See: https://podman.io/getting-started/installation"
         exit 1
     fi
 
-    # shellcheck source=/dev/null
-    . /etc/os-release
+    echo "Installing Podman for $distro..."
 
-    echo "Installing Podman for $ID..."
-
-    case "$ID" in
+    case "$distro" in
         ubuntu|debian)
             apt-get update
             apt-get install -y podman
@@ -108,7 +118,7 @@ install_podman() {
             zypper install -y podman
             ;;
         *)
-            error "Unsupported distribution: $ID"
+            error "Unsupported distribution: $distro"
             echo "Install podman manually: https://podman.io/getting-started/installation"
             exit 1
             ;;
@@ -352,9 +362,27 @@ load_config() {
 # =============================================================================
 
 pull_image() {
+    # A malformed tag here means something overwrote VERSION; podman's own
+    # "invalid reference format" does not say what or where.
+    if [[ ! "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+        error "Refusing to pull with a malformed image tag: '$VERSION'"
+        echo "Set NARRATOR_VERSION to a released version, or NARRATOR_IMAGE to a local image."
+        exit 1
+    fi
+
     echo ""
     echo "Pulling container image $REPO:$VERSION ..."
-    $RUNTIME pull "$REPO:$VERSION"
+
+    if ! $RUNTIME pull "$REPO:$VERSION"; then
+        error "Could not pull $REPO:$VERSION"
+        echo ""
+        echo "The tag has to exist in the registry. Either install from a release:"
+        echo "  curl -fsSLO $RELEASES_URL/narrator && chmod +x narrator"
+        echo "or point this script at an image you built yourself:"
+        echo "  NARRATOR_IMAGE=localhost/narrator NARRATOR_VERSION=dev ./narrator install"
+        exit 1
+    fi
+
     success "Image pulled"
 }
 
