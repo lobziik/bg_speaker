@@ -34,6 +34,9 @@ jobs:
       - name: Ruff
         run: uv run ruff check .
 
+      - name: Ruff format
+        run: uv run ruff format --check .
+
       # Both type checkers run: mypy in strict mode, and ty for the stricter
       # checks it catches that mypy accepts.
       - name: mypy
