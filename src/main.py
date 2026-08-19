@@ -183,9 +183,8 @@ async def run_pipeline(
             logger.error("provider_configuration_error", error=str(e))
             sys.exit(1)
 
-        await tts.start()
-
         try:
+            await tts.start()
             language = await settings_repo.get_or_default(
                 "language", LanguageSettings, LanguageSettings()
             )

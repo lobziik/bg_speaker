@@ -210,12 +210,12 @@ class GeminiLLMSettings(StrictModel):
         temperature: Sampling temperature.
         max_output_tokens: Response length cap.
         thinking_budget: Thinking token budget. 0 disables thinking for the
-            lowest latency (2.5 Flash / Flash-Lite only), -1 lets the model
+            lowest latency (3.6 Flash / Flash-Lite only), -1 lets the model
             decide, None uses the model default.
         safety_threshold: Gemini safety filter strictness.
     """
 
-    model: str = "gemini-2.5-flash"
+    model: str = "gemini-3.6-flash"
     temperature: float = Field(default=0.8, ge=0, le=2)
     max_output_tokens: int = Field(default=500, ge=50, le=2000)
     thinking_budget: int | None = Field(default=0, ge=-1, le=24576)

@@ -490,6 +490,52 @@ class TestWorkerPipelineSwap:
 
         assert worker._pipeline is replacement
 
+    @pytest.mark.asyncio
+    async def test_swap_does_not_wait_for_audio_playback(
+        self,
+        worker: QueueWorker,
+        queue: NarrationQueue,
+        mock_pipeline: MagicMock,
+    ) -> None:
+        """The lock covers generation, not the wait for the overlay to finish.
+
+        Broadcasting sleeps for the length of the audio; holding the lock across
+        it would block a provider change in the UI for the whole narration.
+        """
+        long_result, metrics = mock_pipeline.process.return_value
+        playing = NarrationResult(
+            id=long_result.id,
+            user=long_result.user,
+            voice_text=long_result.voice_text,
+            subtitle_text=long_result.subtitle_text,
+            target_lang=long_result.target_lang,
+            audio_data=long_result.audio_data,
+            duration_ms=5000,
+        )
+        mock_pipeline.process = AsyncMock(return_value=(playing, metrics))
+        mock_pipeline.llm_provider_name = "groq"
+        mock_pipeline.tts_provider_name = "piper"
+
+        replacement = MagicMock(spec=NarrationPipeline)
+        replacement.llm_provider_name = "gemini"
+        replacement.tts_provider_name = "gemini"
+
+        await worker.start()
+        await queue.add(user="TestUser", message="A long one")
+
+        for _ in range(50):
+            if mock_pipeline.process.await_count:
+                break
+            await asyncio.sleep(0.02)
+
+        started = asyncio.get_running_loop().time()
+        await asyncio.wait_for(worker.set_pipeline(replacement), timeout=4.0)
+        elapsed = asyncio.get_running_loop().time() - started
+
+        await worker.stop()
+
+        assert elapsed < 1.0, f"swap waited {elapsed:.1f}s for playback to finish"
+
 
 class TestVoiceOverrideScoping:
     """Per-language voice overrides belong to Piper and must not leak."""
