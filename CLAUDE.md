@@ -220,8 +220,8 @@ Queue event handlers (registered via `queue.on_event()`) are called while the qu
 ## Configuration
 
 - **Secrets**: Environment variables only (`.env` file, never committed)
-- **Static config**: `config/default.yaml` - safe to commit
-- **Dynamic settings**: SQLite database - modified via Web UI
+- **Everything else**: SQLite database - modified via Web UI, seeded with defaults
+  from the Pydantic models on first run
 
 Required env vars: `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_CHANNEL`, `SECRET_KEY`, plus at
 least one LLM API key (`GROQ_API_KEY` or `GEMINI_API_KEY`). `GEMINI_API_KEY` powers both the Gemini

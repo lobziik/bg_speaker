@@ -1,6 +1,5 @@
 """Configuration loading and management."""
 
-from pathlib import Path
 from typing import Literal
 
 import structlog
@@ -33,15 +32,6 @@ class EnvSettings(BaseSettings):
     groq_api_key: SecretStr | None = None
     # Google Gemini - powers both the LLM and the TTS provider
     gemini_api_key: SecretStr | None = None
-    openai_api_key: SecretStr | None = None
-    anthropic_api_key: SecretStr | None = None
-    openrouter_api_key: SecretStr | None = None
-
-    # TTS Providers (Piper doesn't need API key)
-    elevenlabs_api_key: SecretStr | None = None
-
-    # Translation
-    deepl_api_key: SecretStr | None = None
 
     # App
     secret_key: SecretStr = SecretStr("dev-secret-key-change-in-production")
@@ -58,10 +48,6 @@ class EnvSettings(BaseSettings):
             True if both admin_username and admin_password are set.
         """
         return bool(self.admin_username and self.admin_password.get_secret_value())
-
-    # Paths
-    prompts_path: Path = Path("config/prompts")
-    models_path: Path = Path("models")
 
     # Logging
     log_format: Literal["console", "json"] = "console"
