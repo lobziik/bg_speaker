@@ -156,12 +156,27 @@ class GeminiSafetyThreshold(StrEnum):
     BLOCK_NONE = "BLOCK_NONE"
 
 
+class GroqReasoningEffort(StrEnum):
+    """How much reasoning a Groq model should spend before answering.
+
+    Only reasoning models accept this; sending it to a plain one is a 400. It
+    is left unset by default and applied automatically when a model turns out
+    to need it.
+    """
+
+    NONE = "none"
+    DEFAULT = "default"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
 class GeminiThinkingLevel(StrEnum):
     """How much reasoning a Gemini model should spend before answering.
 
-    Mirrors ``google.genai.types.ThinkingLevel``. This is the control current
-    models expose; ``thinking_budget`` is the older numeric equivalent and some
-    models reject it outright.
+    Mirrors ``google.genai.types.ThinkingLevel``. It replaced the numeric
+    ``thinking_budget``: current models reject a budget of 0, and carrying both
+    controls made a form that submits every field impossible to save.
     """
 
     MINIMAL = "MINIMAL"
@@ -206,11 +221,30 @@ class GroqLLMSettings(StrictModel):
 
     The API key is intentionally absent - secrets live in environment
     variables only (``GROQ_API_KEY``), never in the database.
+
+    Attributes:
+        model: Model ID.
+        temperature: Sampling temperature.
+        max_tokens: Response length cap.
+        reasoning_effort: Only meaningful for reasoning models, which refuse
+            JSON mode unless their thinking is turned down. Unset by default,
+            because a model that does not reason rejects the parameter outright.
     """
 
-    model: str = "llama-3.3-70b-versatile"
+    model: str = "openai/gpt-oss-120b"
     temperature: float = Field(default=0.8, ge=0, le=2)
     max_tokens: int = Field(default=500, ge=50, le=2000)
+    reasoning_effort: GroqReasoningEffort | None = None
+
+    @field_validator("reasoning_effort", mode="before")
+    @classmethod
+    def convert_string_to_reasoning_effort(
+        cls, value: str | GroqReasoningEffort | None
+    ) -> GroqReasoningEffort | None:
+        """Convert string to GroqReasoningEffort for JSON deserialization."""
+        if isinstance(value, str):
+            return GroqReasoningEffort(value)
+        return value
 
 
 class GeminiLLMSettings(StrictModel):
@@ -224,10 +258,7 @@ class GeminiLLMSettings(StrictModel):
         temperature: Sampling temperature.
         max_output_tokens: Response length cap.
         thinking_level: How much reasoning to spend. MINIMAL keeps narration
-            latency down and is what current models accept.
-        thinking_budget: Older numeric equivalent of the level, in tokens. -1
-            lets the model decide. Mutually exclusive with thinking_level, and
-            a model may reject it - notably a budget of 0.
+            latency down. Leave unset to let the model decide.
         safety_threshold: Gemini safety filter strictness.
     """
 
@@ -235,7 +266,6 @@ class GeminiLLMSettings(StrictModel):
     temperature: float = Field(default=0.8, ge=0, le=2)
     max_output_tokens: int = Field(default=500, ge=50, le=2000)
     thinking_level: GeminiThinkingLevel | None = GeminiThinkingLevel.MINIMAL
-    thinking_budget: int | None = Field(default=None, ge=-1, le=24576)
     safety_threshold: GeminiSafetyThreshold = GeminiSafetyThreshold.BLOCK_ONLY_HIGH
 
     @field_validator("thinking_level", mode="before")

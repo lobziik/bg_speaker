@@ -133,9 +133,11 @@ Gemini specifics:
 - **Structured output**: narration and moderation both use response schemas, so
   the JSON contract is enforced by the API rather than by prompting.
 - **Thinking level**: defaults to `MINIMAL`, which keeps narration latency down.
-  The older numeric `thinking_budget` is still available for models that want
-  it, but only when no level is set - the two are mutually exclusive. Current
-  models reject a budget of `0` outright.
+  Current models reject the older numeric thinking budget of `0` outright, so
+  the level is the only control.
+- **Groq reasoning models**: a reasoning model refuses JSON mode while its
+  thinking leaks into the response. That is detected and retried once with the
+  reasoning turned off, so such a model works without any configuration.
 - **Safety threshold**: defaults to `BLOCK_ONLY_HIGH` so ordinary fantasy combat
   description is not rejected by Google's filter; the bot's own moderation step
   remains the Twitch-policy gate. A message the provider does block is treated

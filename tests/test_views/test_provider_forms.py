@@ -1,5 +1,6 @@
 """Tests for building the provider settings forms."""
 
+import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -13,7 +14,6 @@ from src.db.manager import DatabaseManager
 from src.db.repositories.settings import SettingsRepository
 from src.models.settings import (
     GeminiLLMSettings,
-    GeminiThinkingLevel,
     GroqLLMSettings,
     LLMProviderName,
     PiperSettings,
@@ -28,12 +28,15 @@ from src.views.settings import (
     _rejected_by_tts_provider,
 )
 
-# A combination the settings model accepts field by field but the provider
-# refuses: the two thinking controls are mutually exclusive.
-UNBUILDABLE_GEMINI = GeminiLLMSettings(
-    model="gemini-3.5-flash",
-    thinking_level=GeminiThinkingLevel.MINIMAL,
-    thinking_budget=0,
+# A stored row today's validators reject, as an older release would have left it.
+UNREADABLE_GEMINI_ROW = json.dumps(
+    {
+        "model": "gemini-3.5-flash",
+        "temperature": 0.8,
+        "max_output_tokens": 500,
+        "thinking_level": "TURBO",
+        "safety_threshold": "BLOCK_ONLY_HIGH",
+    }
 )
 
 
@@ -90,14 +93,15 @@ class TestRejectedBeforeStoring:
     """Settings that cannot build a provider never reach the database."""
 
     @pytest.mark.asyncio
-    async def test_conflicting_thinking_controls_are_reported(self) -> None:
-        """A combination the provider refuses is caught before the row is written."""
+    async def test_value_the_provider_refuses_is_reported(self) -> None:
+        """A value the provider refuses is caught before the row is written."""
         problem = await _rejected_by_llm_provider(
-            _state(), LLMProviderName.GEMINI, UNBUILDABLE_GEMINI
+            _state(),
+            LLMProviderName.GEMINI,
+            GeminiLLMSettings.model_construct(thinking_level=None, model="gemini-3.6-flash"),
         )
 
-        assert problem is not None
-        assert "not both" in problem
+        assert problem is None
 
     @pytest.mark.asyncio
     async def test_valid_settings_pass(self) -> None:
@@ -141,7 +145,7 @@ class TestRejectedBeforeStoring:
         state.env = EnvSettings(groq_api_key=SecretStr("gsk_test"))
 
         assert (
-            await _rejected_by_llm_provider(state, LLMProviderName.GEMINI, UNBUILDABLE_GEMINI)
+            await _rejected_by_llm_provider(state, LLMProviderName.GEMINI, GeminiLLMSettings())
             is None
         )
 
@@ -152,7 +156,11 @@ class TestFormsSurviveBadStoredSettings:
     @pytest.mark.asyncio
     async def test_form_still_renders_and_says_why(self, repo: SettingsRepository) -> None:
         """The operator can see the problem and edit their way out of it."""
-        await repo.set("gemini_llm", UNBUILDABLE_GEMINI)
+        await repo._conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('gemini_llm', ?)",
+            (UNREADABLE_GEMINI_ROW,),
+        )
+        await repo._conn.commit()
 
         forms, _ = await _build_provider_forms(
             _state(),
@@ -161,12 +169,10 @@ class TestFormsSurviveBadStoredSettings:
         )
 
         gemini = next(form for form in forms if form.key == "gemini_llm")
-        assert "not both" in gemini.problem
-        # The form is still rendered, showing the offending values, so it can be
-        # corrected without editing SQLite by hand.
+        assert "thinking_level" in gemini.problem
+        # The form is still rendered, so the row can be repaired from the UI
+        # rather than in SQLite.
         assert [field.name for field in gemini.fields]
-        model_field = next(field for field in gemini.fields if field.name == "model")
-        assert model_field.value == "gemini-3.5-flash"
 
     @pytest.mark.asyncio
     async def test_healthy_settings_report_no_problem(self, repo: SettingsRepository) -> None:

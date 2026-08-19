@@ -62,6 +62,13 @@ needs a chunked WebSocket protocol that does not exist yet.
 - `list_models()` / `list_voices()` fill the model and voice dropdowns, so a provider's catalogue
   has one source of truth.
 
+### Groq Reasoning Models
+A reasoning model refuses JSON mode while its thinking ends up in the content, and Groq reports
+that as `json_validate_failed` with an empty `failed_generation`. `_complete_json()` retries once
+with `reasoning_effort="none"`, which is what makes such a model work without a hardcoded list of
+which models reason. `reasoning_effort` is also exposed as a setting but left unset by default: a
+model that does not reason rejects the parameter outright.
+
 ### Live Model Catalogues
 `list_models()` asks the provider's API which models the configured key can actually use, so the
 dropdown reflects the account rather than a list baked into the source.
@@ -125,11 +132,10 @@ previous providers. It also creates and starts the worker if it does not exist y
   (`additionalProperties`) the Gemini API rejects.
 - The SDK's enums accept unknown values with only a `UserWarning`, so `safety_threshold` is
   validated against actual members before use.
-- Reasoning effort is set with `thinking_level` (MINIMAL by default, for narration latency).
-  `thinking_budget` is the older numeric form and is only used when no level is set; the two are
-  mutually exclusive and the provider refuses both at once. A budget of `0` is rejected by current
-  models with a bare `400 INVALID_ARGUMENT`, which is why the level is the default and why a 400
-  logs the thinking and safety settings that were sent.
+- Reasoning effort is set with `thinking_level` (MINIMAL by default, for narration latency). The
+  numeric `thinking_budget` is gone: current models reject a budget of `0` with a bare
+  `400 INVALID_ARGUMENT`, and two mutually exclusive fields cannot share a form that submits every
+  field on save. A 400 now logs the thinking and safety settings that were sent.
 - There is no hardcoded table of per-model thinking rules any more: it went stale (it named models
   the API now 404s for) and the API is the authority.
 - A safety-filter refusal raises `LLMContentBlockedError`, which the pipeline maps onto

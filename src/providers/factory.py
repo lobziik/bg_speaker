@@ -79,6 +79,11 @@ def build_llm_provider(
                 model=groq_settings.model,
                 temperature=groq_settings.temperature,
                 max_tokens=groq_settings.max_tokens,
+                reasoning_effort=(
+                    groq_settings.reasoning_effort.value
+                    if groq_settings.reasoning_effort is not None
+                    else None
+                ),
             )
 
         case LLMProviderName.GEMINI:
@@ -92,12 +97,13 @@ def build_llm_provider(
                 model=gemini_settings.model,
                 temperature=gemini_settings.temperature,
                 max_output_tokens=gemini_settings.max_output_tokens,
+                # str() rather than .value: a row written by an older release
+                # can hold a plain string, and the provider validates it anyway.
                 thinking_level=(
-                    gemini_settings.thinking_level.value
+                    str(gemini_settings.thinking_level)
                     if gemini_settings.thinking_level is not None
                     else None
                 ),
-                thinking_budget=gemini_settings.thinking_budget,
                 safety_threshold=gemini_settings.safety_threshold.value,
             )
 

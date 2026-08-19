@@ -11,7 +11,7 @@ import structlog
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 from google.genai import errors as genai_errors
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 # TC001 ignored: FastAPI Depends() requires these at runtime for dependency injection
 from src.api.dependencies import AppStateDep, SettingsRepoDep, TemplatesDep  # noqa: TC001
@@ -19,7 +19,9 @@ from src.models.narration import LanguageCode, NarratorStyle
 from src.models.settings import (
     GeminiLLMSettings,
     GeminiSafetyThreshold,
+    GeminiThinkingLevel,
     GroqLLMSettings,
+    GroqReasoningEffort,
     LanguageSettings,
     LLMProviderName,
     NarratorSettings,
@@ -113,6 +115,35 @@ class ProviderForm:
     problem: str = ""
 
 
+async def _stored_or_default[T: BaseModel](
+    repo: SettingsRepository,
+    key: str,
+    model: type[T],
+    default: T,
+) -> tuple[T, str]:
+    """Load stored settings, surviving a row that no longer validates.
+
+    A row written by an older release can fail today's validators. Raising here
+    would take down the settings page, which is the only place the operator can
+    repair it, so the defaults are used and the reason is handed back for the
+    form to show.
+
+    Args:
+        repo: Settings repository.
+        key: Settings key to read.
+        model: Model to validate against.
+        default: Value to use when the row is missing or unreadable.
+
+    Returns:
+        Tuple of (settings, problem). The problem is empty when the row loaded.
+    """
+    try:
+        return await repo.get_or_default(key, model, default), ""
+    except ValidationError as e:
+        logger.warning("provider_settings_unreadable", key=key, error=str(e))
+        return default, _first_validation_message(e)
+
+
 async def _llm_catalogue(provider: LLMProvider, field: str) -> dict[str, list[FieldOption]]:
     """Fetch the provider's model catalogue as select options.
 
@@ -165,19 +196,28 @@ async def _build_provider_forms(
     available_llm = state.env.get_available_llm_providers()
     available_tts = state.env.get_available_tts_providers()
 
-    groq_settings = await settings_repo.get_or_default(
-        "groq_llm", GroqLLMSettings, GroqLLMSettings()
+    groq_settings, groq_problem = await _stored_or_default(
+        settings_repo, "groq_llm", GroqLLMSettings, GroqLLMSettings()
     )
-    gemini_llm_settings = await settings_repo.get_or_default(
-        "gemini_llm", GeminiLLMSettings, GeminiLLMSettings()
+    gemini_llm_settings, gemini_llm_problem = await _stored_or_default(
+        settings_repo, "gemini_llm", GeminiLLMSettings, GeminiLLMSettings()
     )
-    piper_settings = await settings_repo.get_or_default("piper", PiperSettings, PiperSettings())
-    gemini_tts_settings = await settings_repo.get_or_default(
-        "gemini_tts", GeminiTTSSettings, GeminiTTSSettings()
+    piper_settings, piper_problem = await _stored_or_default(
+        settings_repo, "piper", PiperSettings, PiperSettings()
+    )
+    gemini_tts_settings, gemini_tts_problem = await _stored_or_default(
+        settings_repo, "gemini_tts", GeminiTTSSettings, GeminiTTSSettings()
     )
     voice_overrides = await settings_repo.get_or_default(
         "tts_voice", TTSVoiceSettings, TTSVoiceSettings()
     )
+
+    stored_problems = {
+        "groq_llm": groq_problem,
+        "gemini_llm": gemini_llm_problem,
+        "piper": piper_problem,
+        "gemini_tts": gemini_tts_problem,
+    }
 
     stored: dict[str, StrictModel] = {
         "groq_llm": groq_settings,
@@ -193,7 +233,7 @@ async def _build_provider_forms(
         configured = llm_name.value in available_llm
         active = selection.llm is llm_name
         llm_fields: list[SettingsField] = []
-        problem = ""
+        problem = stored_problems[key]
 
         if configured:
             try:
@@ -251,7 +291,7 @@ async def _build_provider_forms(
         configured = tts_name.value in available_tts
         active = selection.tts is tts_name
         tts_fields: list[SettingsField] = []
-        problem = ""
+        problem = stored_problems[key]
 
         if configured:
             try:
@@ -850,11 +890,14 @@ async def save_groq_llm_settings(
     """Save Groq model parameters, rebuilding the pipeline if Groq is active."""
     form_data = await request.form()
 
+    raw_effort = str(form_data.get("reasoning_effort", "")).strip()
+
     try:
         settings = GroqLLMSettings(
             model=str(form_data["model"]),
             temperature=float(str(form_data["temperature"])),
             max_tokens=int(str(form_data["max_tokens"])),
+            reasoning_effort=GroqReasoningEffort(raw_effort) if raw_effort else None,
         )
     except (ValidationError, ValueError) as e:
         return _invalid_settings_toast(e)
@@ -884,14 +927,14 @@ async def save_gemini_llm_settings(
     """Save Gemini LLM parameters, rebuilding the pipeline if Gemini is active."""
     form_data = await request.form()
 
-    raw_budget = str(form_data.get("thinking_budget", "")).strip()
+    raw_level = str(form_data.get("thinking_level", "")).strip()
 
     try:
         settings = GeminiLLMSettings(
             model=str(form_data["model"]),
             temperature=float(str(form_data["temperature"])),
             max_output_tokens=int(str(form_data["max_output_tokens"])),
-            thinking_budget=int(raw_budget) if raw_budget else None,
+            thinking_level=GeminiThinkingLevel(raw_level) if raw_level else None,
             safety_threshold=GeminiSafetyThreshold(str(form_data["safety_threshold"])),
         )
     except (ValidationError, ValueError) as e:

@@ -67,22 +67,6 @@ class TestGeminiLLMProviderConstruction:
         assert provider._temperature == 0.8
         assert provider._max_output_tokens == 500
         assert provider._thinking_level is genai_types.ThinkingLevel.MINIMAL
-        assert provider._thinking_budget is None
-
-    def test_both_thinking_controls_rejected(self, mock_api_key: SecretStr) -> None:
-        """They are two spellings of one control, and the API rejects the pair."""
-        with pytest.raises(ValueError, match="not both"):
-            GeminiLLMProvider(api_key=mock_api_key, thinking_level="MINIMAL", thinking_budget=0)
-
-    def test_budget_used_when_no_level_is_set(self, mock_api_key: SecretStr) -> None:
-        """The numeric control still works for a model that wants it."""
-        provider = GeminiLLMProvider(api_key=mock_api_key, thinking_level=None, thinking_budget=-1)
-
-        config = provider._build_config("system", None)
-
-        assert config.thinking_config is not None
-        assert config.thinking_config.thinking_budget == -1
-        assert config.thinking_config.thinking_level is None
 
     def test_invalid_thinking_level(self, mock_api_key: SecretStr) -> None:
         """An unknown level is rejected rather than passed through."""
@@ -120,11 +104,7 @@ class TestGeminiLLMConfig:
 
     def test_config_omits_thinking_when_unset(self, mock_api_key: SecretStr) -> None:
         """With neither control set the model decides for itself."""
-        provider = GeminiLLMProvider(
-            api_key=mock_api_key,
-            thinking_level=None,
-            thinking_budget=None,
-        )
+        provider = GeminiLLMProvider(api_key=mock_api_key, thinking_level=None)
 
         config = provider._build_config("system prompt", None)
 
@@ -237,7 +217,6 @@ class TestGeminiLLMMetadata:
             "temperature",
             "max_output_tokens",
             "thinking_level",
-            "thinking_budget",
             "safety_threshold",
         }
 

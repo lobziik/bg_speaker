@@ -155,6 +155,23 @@ Running a real narration surfaced three things the offline work could not.
   same call returns speech, image, music, robotics and agent models, so the
   dropdown offered "Nano Banana Pro" as a narrator. Those are excluded by marker.
 
+### 11. Second Round Against the Live APIs
+
+- [x] Groq narration failed with `json_validate_failed` and an empty
+  `failed_generation` on a reasoning model. `reasoning_format` does not help;
+  `reasoning_effort="none"` does. Since that parameter breaks models that do not
+  reason, it is not sent by default - the failure is detected and retried once.
+- [x] Both fallback catalogues named models the APIs now answer 404 for
+  (`llama-3.3-70b-versatile`, `gemini-2.5-*`). Replaced from live listings and
+  kept short.
+- [x] The Groq listing filter kept TTS models (`orpheus`) and safety classifiers
+  (`prompt-guard`, `safeguard`), which reject JSON mode. Excluded by marker.
+- [x] `thinking_budget` is gone rather than coexisting with `thinking_level`:
+  two mutually exclusive fields in a form that submits everything made the
+  Gemini section impossible to save once a stored row carried both.
+- [x] The settings page survives a stored row today's validators reject - the
+  earlier guard only covered the provider constructor, not loading the row.
+
 ## Bugs Found and Fixed Along the Way
 
 - `NarratorSettings.system_prompt` was never reaching the LLM: the pipeline's
@@ -200,7 +217,7 @@ Running a real narration surfaced three things the offline work could not.
 
 ## Verification
 
-- 271 tests pass (124 new: Gemini LLM, Gemini TTS, factory, worker pipeline swap,
+- 268 tests pass (121 new: Gemini LLM, Gemini TTS, factory, worker pipeline swap,
   database migrations, prompt templates, settings repository, schema-driven form
   rendering, and regression tests for the voice-override scoping bug, the
   settings page surviving a rejected stored row, and the provider swap no longer
