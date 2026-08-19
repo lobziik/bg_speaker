@@ -81,30 +81,39 @@ class AppState:
 
         settings_repo = SettingsRepository(self.db.connection)
         llm_provider, tts_provider = await build_providers(self.env, settings_repo)
-        await tts_provider.start()
-
-        pipeline = NarrationPipeline(
-            llm_provider=llm_provider,
-            tts_provider=tts_provider,
-        )
 
         previous_llm = self.llm_provider
         previous_tts = self.tts_provider
 
-        if self.worker is None:
-            self.worker = QueueWorker(
-                queue=self.queue,
-                pipeline=pipeline,
-                ws_manager=get_websocket_manager(),
-                rewards_controller=self.twitch_rewards,
-                db_connection=self.db.connection,
-                global_cooldown=self.global_cooldown,
+        # Until the new providers are recorded on the state below, nothing else
+        # can reach them - so anything that fails in between has to close them
+        # here or their HTTP pools and background tasks leak.
+        try:
+            await tts_provider.start()
+
+            pipeline = NarrationPipeline(
+                llm_provider=llm_provider,
+                tts_provider=tts_provider,
             )
-            await self.worker.start()
-        else:
-            # Swapping the worker's pipeline waits for the in-flight item, which
-            # is what makes closing the previous providers below safe.
-            await self.worker.set_pipeline(pipeline)
+
+            if self.worker is None:
+                self.worker = QueueWorker(
+                    queue=self.queue,
+                    pipeline=pipeline,
+                    ws_manager=get_websocket_manager(),
+                    rewards_controller=self.twitch_rewards,
+                    db_connection=self.db.connection,
+                    global_cooldown=self.global_cooldown,
+                )
+                await self.worker.start()
+            else:
+                # Swapping the worker's pipeline waits for the in-flight item,
+                # which is what makes closing the previous providers below safe.
+                await self.worker.set_pipeline(pipeline)
+        except BaseException:
+            await tts_provider.close()
+            await llm_provider.close()
+            raise
 
         self.pipeline = pipeline
         self.llm_provider = llm_provider

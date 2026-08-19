@@ -152,11 +152,31 @@ usable parts were wired up and the rest removed.
   provider failed to build, leaking one pool per retry from the settings form.
   (Found by review.)
 
+### 8. Second Review Pass
+
+- [x] Provider settings are proved buildable before they are stored. A model and
+  thinking budget the provider refuses used to be written to the database first
+  and only rejected by the rebuild, which bricked the settings page on the next
+  render and left the worker unstarted after a restart.
+- [x] The settings page survives a stored combination the provider rejects: the
+  section explains the problem and still renders the form from a default-built
+  instance, so the offending value can be corrected in the UI instead of in
+  SQLite.
+- [x] The worker's processing lock now covers generation only. It used to be
+  held across the broadcast, which waits out the audio playback, so saving a
+  provider change during a narration blocked the request for its whole length.
+  The provider names in the history are pinned to the pipeline that ran.
+- [x] `rebuild_pipeline()` and the CLI close freshly built providers when a
+  later startup step fails.
+
 ## Verification
 
-- 244 tests pass (97 new: Gemini LLM, Gemini TTS, factory, worker pipeline swap,
+- 252 tests pass (105 new: Gemini LLM, Gemini TTS, factory, worker pipeline swap,
   database migrations, prompt templates, settings repository, schema-driven form
-  rendering, and a regression test for the voice-override scoping bug).
+  rendering, and regression tests for the voice-override scoping bug, the
+  settings page surviving a rejected stored row, and the provider swap no longer
+  waiting for audio playback - the last one verified to fail against the old
+  code).
 - `ruff check .`, `mypy .` and `ty check .` all clean.
 - Container built for `linux/arm64` with podman and booted end to end: systemd
   units active, migrations applied, worker started on the env-derived provider,

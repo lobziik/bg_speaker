@@ -127,6 +127,12 @@
             Not configured - set this provider's API key in the environment to enable it.
         </p>
         {% else %}
+        {% if form.problem %}
+        <p class="help-text" style="color: var(--color-error, #c0504d);">
+            This provider rejects the stored settings: {{ form.problem }}
+            They are shown below - save a working combination to clear this.
+        </p>
+        {% endif %}
         <form hx-post="/settings/providers/{{ form.key }}"
               hx-target="#toast-container"
               hx-swap="innerHTML">

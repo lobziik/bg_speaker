@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+import structlog
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 from google.genai import errors as genai_errors
@@ -33,6 +34,7 @@ from src.models.settings import (
 from src.providers.factory import (
     ProviderConfigurationError,
     build_llm_provider,
+    build_providers,
     build_tts_provider,
     load_provider_settings,
 )
@@ -49,6 +51,8 @@ if TYPE_CHECKING:
     from src.db.repositories.settings import SettingsRepository
     from src.providers.llm.base import LLMProvider
     from src.providers.tts.base import TTSProvider, Voice
+
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -94,6 +98,8 @@ class ProviderForm:
         configured: Whether its credentials are present, so it can be built.
         fields: Controls parsed from the provider's settings schema.
         supports_voice_test: Whether the section offers a voice preview button.
+        problem: Why the form could not be built, if the stored settings are
+            rejected by the provider itself.
     """
 
     key: str
@@ -104,6 +110,7 @@ class ProviderForm:
     configured: bool
     fields: list[SettingsField]
     supports_voice_test: bool
+    problem: str = ""
 
 
 async def _llm_catalogue(provider: LLMProvider, field: str) -> dict[str, list[FieldOption]]:
@@ -186,18 +193,36 @@ async def _build_provider_forms(
         configured = llm_name.value in available_llm
         active = selection.llm is llm_name
         llm_fields: list[SettingsField] = []
+        problem = ""
 
         if configured:
-            llm_provider = (
-                state.llm_provider
-                if active and state.llm_provider is not None
-                else build_llm_provider(
+            try:
+                llm_provider = (
+                    state.llm_provider
+                    if active and state.llm_provider is not None
+                    else build_llm_provider(
+                        env=state.env,
+                        provider=llm_name,
+                        groq_settings=groq_settings,
+                        gemini_settings=gemini_llm_settings,
+                    )
+                )
+            except (ValueError, ProviderConfigurationError) as e:
+                # A stored combination the provider rejects - written by an older
+                # release, or edited into the database by hand - must not take the
+                # settings page down, because the page is the only place the
+                # operator can correct it. Defaults always build, and only the
+                # schema and catalogue come from this instance; the controls below
+                # still show the stored values.
+                logger.warning("provider_form_fallback", provider=llm_name.value, error=str(e))
+                problem = str(e)
+                llm_provider = build_llm_provider(
                     env=state.env,
                     provider=llm_name,
-                    groq_settings=groq_settings,
-                    gemini_settings=gemini_llm_settings,
+                    groq_settings=GroqLLMSettings(),
+                    gemini_settings=GeminiLLMSettings(),
                 )
-            )
+
             try:
                 llm_fields = build_fields(
                     llm_provider.get_settings_schema(),
@@ -218,6 +243,7 @@ async def _build_provider_forms(
                 configured=configured,
                 fields=llm_fields,
                 supports_voice_test=False,
+                problem=problem,
             )
         )
 
@@ -225,19 +251,32 @@ async def _build_provider_forms(
         configured = tts_name.value in available_tts
         active = selection.tts is tts_name
         tts_fields: list[SettingsField] = []
+        problem = ""
 
         if configured:
-            tts_provider = (
-                state.tts_provider
-                if active and state.tts_provider is not None
-                else build_tts_provider(
+            try:
+                tts_provider = (
+                    state.tts_provider
+                    if active and state.tts_provider is not None
+                    else build_tts_provider(
+                        env=state.env,
+                        provider=tts_name,
+                        piper_settings=piper_settings,
+                        piper_voice_settings=voice_overrides,
+                        gemini_settings=gemini_tts_settings,
+                    )
+                )
+            except (ValueError, ProviderConfigurationError) as e:
+                logger.warning("provider_form_fallback", provider=tts_name.value, error=str(e))
+                problem = str(e)
+                tts_provider = build_tts_provider(
                     env=state.env,
                     provider=tts_name,
-                    piper_settings=piper_settings,
-                    piper_voice_settings=voice_overrides,
-                    gemini_settings=gemini_tts_settings,
+                    piper_settings=PiperSettings(),
+                    piper_voice_settings=TTSVoiceSettings(),
+                    gemini_settings=GeminiTTSSettings(),
                 )
-            )
+
             try:
                 catalogue = await _tts_catalogue(tts_provider, catalogue_field)
                 if tts_name is TTSProviderName.PIPER:
@@ -261,6 +300,7 @@ async def _build_provider_forms(
                 configured=configured,
                 fields=tts_fields,
                 supports_voice_test=active,
+                problem=problem,
             )
         )
 
@@ -530,6 +570,12 @@ async def save_piper_settings(
     except (ValidationError, ValueError) as e:
         return _invalid_settings_toast(e)
 
+    problem = await _rejected_by_tts_provider(
+        state, TTSProviderName.PIPER, settings, GeminiTTSSettings()
+    )
+    if problem:
+        return _not_saved_toast(problem)
+
     await settings_repo.set("piper", settings)
 
     running_tts = state.pipeline.tts_provider if state.pipeline else None
@@ -665,11 +711,96 @@ def _invalid_settings_toast(error: ValidationError | ValueError) -> Response:
         HTMX toast response naming the offending field.
     """
     detail = _first_validation_message(error) if isinstance(error, ValidationError) else str(error)
+    return _not_saved_toast(detail)
+
+
+def _not_saved_toast(detail: str) -> Response:
+    """Report that nothing was stored, and why.
+
+    Args:
+        detail: What the operator has to change.
+
+    Returns:
+        HTMX toast response carrying the reason.
+    """
     message = f"Not saved - {detail}"
     return Response(
         content=f"<div class='toast error'>{message}</div>",
         headers=_toast_response(message, success=False),
     )
+
+
+async def _rejected_by_llm_provider(
+    state: AppState,
+    provider: LLMProviderName,
+    settings: GeminiLLMSettings | GroqLLMSettings,
+) -> str | None:
+    """Try to build the provider with the submitted settings, then throw it away.
+
+    Providers enforce combinations the settings model cannot express - a Gemini
+    model that will not accept the chosen thinking budget, for instance. Doing
+    the trial build before storing keeps a combination that cannot run out of
+    the database, where it would otherwise brick the settings page and leave the
+    worker dead after the next restart.
+
+    Args:
+        state: Application state, for the environment.
+        provider: Which LLM provider the settings belong to.
+        settings: The submitted settings.
+
+    Returns:
+        The provider's complaint, or None when it builds.
+    """
+    if provider.value not in state.env.get_available_llm_providers():
+        return None
+
+    groq = settings if isinstance(settings, GroqLLMSettings) else GroqLLMSettings()
+    gemini = settings if isinstance(settings, GeminiLLMSettings) else GeminiLLMSettings()
+
+    try:
+        built = build_llm_provider(
+            env=state.env, provider=provider, groq_settings=groq, gemini_settings=gemini
+        )
+    except (ValueError, ProviderConfigurationError) as e:
+        return str(e)
+
+    await built.close()
+    return None
+
+
+async def _rejected_by_tts_provider(
+    state: AppState,
+    provider: TTSProviderName,
+    piper_settings: PiperSettings,
+    gemini_settings: GeminiTTSSettings,
+) -> str | None:
+    """Try to build the TTS provider with the submitted settings, then discard it.
+
+    Args:
+        state: Application state, for the environment.
+        provider: Which TTS provider the settings belong to.
+        piper_settings: Piper settings to test with.
+        gemini_settings: Gemini settings to test with.
+
+    Returns:
+        The provider's complaint, or None when it builds.
+    """
+    if provider.value not in state.env.get_available_tts_providers():
+        return None
+
+    try:
+        built = build_tts_provider(
+            env=state.env,
+            provider=provider,
+            piper_settings=piper_settings,
+            piper_voice_settings=TTSVoiceSettings(),
+            gemini_settings=gemini_settings,
+        )
+    except (ValueError, ProviderConfigurationError) as e:
+        return str(e)
+
+    await built.close()
+    return None
 
 
 @router.post("/settings/providers", response_class=HTMLResponse)
@@ -688,6 +819,19 @@ async def save_provider_selection(
         )
     except (ValidationError, ValueError) as e:
         return _invalid_settings_toast(e)
+
+    # Prove the pair can actually be built before it becomes the stored
+    # selection; otherwise a failed rebuild leaves a selection behind that stops
+    # the worker from starting on the next boot.
+    try:
+        llm_provider, tts_provider = await build_providers(
+            state.env, settings_repo, selection=settings
+        )
+    except (ValueError, ProviderConfigurationError) as e:
+        return _not_saved_toast(str(e))
+
+    await tts_provider.close()
+    await llm_provider.close()
 
     await settings_repo.set("providers", settings)
 
@@ -714,6 +858,10 @@ async def save_groq_llm_settings(
         )
     except (ValidationError, ValueError) as e:
         return _invalid_settings_toast(e)
+
+    problem = await _rejected_by_llm_provider(state, LLMProviderName.GROQ, settings)
+    if problem:
+        return _not_saved_toast(problem)
 
     await settings_repo.set("groq_llm", settings)
 
@@ -749,6 +897,10 @@ async def save_gemini_llm_settings(
     except (ValidationError, ValueError) as e:
         return _invalid_settings_toast(e)
 
+    problem = await _rejected_by_llm_provider(state, LLMProviderName.GEMINI, settings)
+    if problem:
+        return _not_saved_toast(problem)
+
     await settings_repo.set("gemini_llm", settings)
 
     active = await load_provider_settings(settings_repo, state.env)
@@ -779,6 +931,12 @@ async def save_gemini_tts_settings(
         )
     except (ValidationError, ValueError) as e:
         return _invalid_settings_toast(e)
+
+    problem = await _rejected_by_tts_provider(
+        state, TTSProviderName.GEMINI, PiperSettings(), settings
+    )
+    if problem:
+        return _not_saved_toast(problem)
 
     await settings_repo.set("gemini_tts", settings)
 

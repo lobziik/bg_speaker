@@ -145,13 +145,12 @@ class QueueWorker:
                 await asyncio.sleep(1.0)
 
     async def _process_item(self, item: QueueItem) -> None:
-        """Process a single queue item, holding the pipeline swap lock.
+        """Process a single queue item.
 
         Args:
             item: The queue item to process.
         """
-        async with self._processing_lock:
-            await self._run_pipeline_for_item(item)
+        await self._run_pipeline_for_item(item)
 
     async def _run_pipeline_for_item(self, item: QueueItem) -> None:
         """Run one queue item through the pipeline and publish the result.
@@ -165,6 +164,11 @@ class QueueWorker:
             user=item.user,
             message_length=len(item.message),
         )
+
+        # Pinned inside the lock below, so the history records the pipeline that
+        # actually produced the narration even if a swap lands mid-item.
+        llm_provider_name = self._pipeline.llm_provider_name
+        tts_provider_name = self._pipeline.tts_provider_name
 
         try:
             # Load settings from database
@@ -218,18 +222,25 @@ class QueueWorker:
                 message=item.message,
             )
 
-            # Process through pipeline with language and voice parameters
-            result, metrics = await self._pipeline.process(
-                request,
-                narrator_lang=narrator_lang,
-                subtitle_lang=subtitle_lang,
-                auto_translate=auto_translate,
-                bypass_llm=bypass_llm,
-                voice_id=voice_id,
-                enable_moderation=enable_moderation,
-                custom_prompt=custom_prompt,
-                prompts=prompts,
-            )
+            # The lock is held only while the providers are in use: once
+            # process() returns, the result is plain bytes and a swap is safe.
+            # Broadcasting waits out the audio playback, which would otherwise
+            # block a provider change for the length of the narration.
+            async with self._processing_lock:
+                pipeline = self._pipeline
+                llm_provider_name = pipeline.llm_provider_name
+                tts_provider_name = pipeline.tts_provider_name
+                result, metrics = await pipeline.process(
+                    request,
+                    narrator_lang=narrator_lang,
+                    subtitle_lang=subtitle_lang,
+                    auto_translate=auto_translate,
+                    bypass_llm=bypass_llm,
+                    voice_id=voice_id,
+                    enable_moderation=enable_moderation,
+                    custom_prompt=custom_prompt,
+                    prompts=prompts,
+                )
 
             # Broadcast to WebSocket clients
             await self._broadcast_narration(result)
@@ -248,6 +259,8 @@ class QueueWorker:
                 llm_latency_ms=metrics.llm_latency_ms,
                 tts_latency_ms=metrics.tts_latency_ms,
                 total_latency_ms=metrics.llm_latency_ms + metrics.tts_latency_ms,
+                llm_provider=llm_provider_name,
+                tts_provider=tts_provider_name,
             )
 
             # Fulfill Twitch redemption if applicable
@@ -287,6 +300,8 @@ class QueueWorker:
                 status="moderation_rejected",
                 moderation_latency_ms=e.latency_ms,
                 rejection_reason=f"[{e.category}] {e.reason}",
+                llm_provider=llm_provider_name,
+                tts_provider=tts_provider_name,
             )
 
             # Broadcast moderation error to clients
@@ -327,6 +342,8 @@ class QueueWorker:
                 result=None,
                 status="error",
                 error_message=str(e),
+                llm_provider=llm_provider_name,
+                tts_provider=tts_provider_name,
             )
 
             # Broadcast error to clients
@@ -372,6 +389,8 @@ class QueueWorker:
         total_latency_ms: int | None = None,
         rejection_reason: str | None = None,
         error_message: str | None = None,
+        llm_provider: str = "",
+        tts_provider: str = "",
     ) -> None:
         """Log narration to database.
 
@@ -387,6 +406,8 @@ class QueueWorker:
             total_latency_ms: Total processing time.
             rejection_reason: Reason for rejection if moderation_rejected.
             error_message: Error message if failed.
+            llm_provider: Name of the LLM provider that ran this item.
+            tts_provider: Name of the TTS provider that ran this item.
         """
         if not self._db_connection:
             return
@@ -402,8 +423,8 @@ class QueueWorker:
                 status=status,
                 narrator_lang=narrator_lang,
                 subtitle_lang=subtitle_lang,
-                llm_provider=self._pipeline.llm_provider_name,
-                tts_provider=self._pipeline.tts_provider_name,
+                llm_provider=llm_provider,
+                tts_provider=tts_provider,
                 latency_moderation_ms=moderation_latency_ms,
                 latency_llm_ms=llm_latency_ms,
                 latency_tts_ms=tts_latency_ms,
