@@ -1,13 +1,15 @@
-# Phase 5 Progress: Gemini Providers & Editable Prompts
+# Phase 5 Progress: Gemini Providers & Self-Hosted Release
 
 ## Overview
 
 Phase 5 adds Google Gemini as both an LLM and a TTS provider, makes the provider
-choice a runtime setting instead of a hardcoded constant, and moves every prompt
-out of the source and into editable settings.
+choice a runtime setting instead of a hardcoded constant, and turns the project
+into something deployable on a single VM (built and verified for OCI Ampere /
+arm64) with one command.
 
-**Deliverable:** Gemini LLM + Gemini TTS selectable from the Web UI, with all
-narration and moderation prompts stored in the database and edited there too.
+**Deliverable:** Gemini LLM + Gemini TTS selectable from the Web UI, and a
+release image (systemd + Caddy, automatic TLS) published to GHCR for amd64 and
+arm64 with a `narrator` installer CLI.
 
 ## Completed Tasks
 
@@ -88,6 +90,19 @@ narration and moderation prompts stored in the database and edited there too.
 - [x] The worker loads prompts per queue item, so edits apply from the next
   narration without a restart or pipeline rebuild.
 
+### 7. Release & Deployment
+
+- [x] `container/` - UBI10-init image running three systemd units:
+  `narrator-init` (renders `/etc/narrator/env` and the Caddyfile, fails fast on a
+  missing variable), `narrator-app` (uvicorn on loopback as the `narrator` user),
+  `narrator-caddy` (TLS termination with automatic Let's Encrypt).
+- [x] `.github/workflows/release.yml` - buildah builds on native amd64 and arm64
+  runners, pushed to GHCR and joined into a manifest; the `narrator` CLI is
+  attached to the GitHub release with its version stamped in.
+- [x] `narrator` - installer/operator CLI (podman first, docker fallback):
+  `install`, `start`, `stop`, `restart`, `logs [app|caddy|init]`, `status`,
+  `upgrade`.
+
 ## Bugs Found and Fixed Along the Way
 
 - `NarratorSettings.system_prompt` was never reaching the LLM: the pipeline's
@@ -112,10 +127,11 @@ narration and moderation prompts stored in the database and edited there too.
 - 230 tests pass (83 new: Gemini LLM, Gemini TTS, factory, worker pipeline swap,
   database migrations, prompt templates, settings repository).
 - `ruff check .`, `mypy .` and `ty check .` all clean.
-- The Providers and Prompts tabs were exercised against a live app: provider swap
-  with a pipeline rebuild, a missing API key reported as a toast rather than a
-  500, prompt validation failures leaving the stored value untouched, and the
-  defaults seeded once on first boot and preserved across restarts.
+- Container built for `linux/arm64` with podman and booted end to end: systemd
+  units active, migrations applied, worker started on the env-derived provider,
+  dashboard behind Basic Auth, overlay served, health reachable through Caddy TLS.
+- The `podman run` flag set used by `narrator start` was exercised directly,
+  including named volumes and `--health-cmd`.
 
 ## Not Covered
 

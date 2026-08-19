@@ -1,0 +1,35 @@
+[Unit]
+Description=BG3 Twitch narrator bot (FastAPI + queue worker)
+Documentation=https://github.com/lobziik/bg_speaker
+After=narrator-init.service network.target
+Requires=narrator-init.service
+
+[Service]
+Type=simple
+User=narrator
+Group=narrator
+EnvironmentFile=/etc/narrator/env
+# Relative paths in the app (data/narrator.db, data/piper-tts) resolve here,
+# which is the persistent volume.
+WorkingDirectory=/var/lib/narrator
+# Bound to loopback on purpose: Caddy is the only thing that talks to it.
+ExecStart=/app/.venv/bin/python -m src.main serve --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+# The app package lives in /app, the working directory does not.
+Environment=PYTHONPATH=/app
+Environment=PYTHONUNBUFFERED=1
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+PrivateTmp=true
+ReadWritePaths=/var/lib/narrator
+
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

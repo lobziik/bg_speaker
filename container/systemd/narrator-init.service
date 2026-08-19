@@ -1,0 +1,24 @@
+[Unit]
+Description=Initialize BG3 narrator configuration
+Documentation=https://github.com/lobziik/bg_speaker
+After=network.target
+Before=narrator-app.service narrator-caddy.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/narrator-init.sh
+RemainAfterExit=yes
+SyslogIdentifier=narrator-init
+
+StandardOutput=journal+console
+StandardError=journal+console
+
+# Pass environment variables from the container env (podman --env-file) into
+# this service. systemd does NOT inherit the container environment
+# automatically - any variable narrator-init.sh reads MUST be listed here,
+# otherwise its ${VAR:-default} expansion silently falls back to the default
+# and the operator's value is dropped.
+PassEnvironment=DOMAIN LETSENCRYPT_EMAIL LETSENCRYPT_STAGING SECRET_KEY ADMIN_USERNAME ADMIN_PASSWORD GROQ_API_KEY GEMINI_API_KEY TWITCH_CLIENT_ID TWITCH_CLIENT_SECRET TWITCH_CHANNEL TWITCH_REDIRECT_URI DATABASE_URL LOG_FORMAT LOG_LEVEL
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+# Rendered by narrator-init.sh with envsubst. Do not edit inside the container -
+# change the deployment environment and restart instead.
+
+{
+	email ${LETSENCRYPT_EMAIL}
+	admin off
+${ACME_CA_DIRECTIVE}
+}
+
+${DOMAIN} {
+	encode zstd gzip
+
+	# Everything - dashboard, OBS overlay and the /ws/overlay WebSocket upgrade -
+	# goes to the app on loopback. Caddy proxies WebSockets natively.
+	reverse_proxy 127.0.0.1:8000 {
+		header_up X-Forwarded-Proto https
+	}
+
+	log {
+		output stderr
+		format console
+	}
+}
