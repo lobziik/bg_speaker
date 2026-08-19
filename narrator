@@ -680,9 +680,15 @@ cmd_doctor() {
             check_mark ok "Port 80 answers on the public address"
         else
             check_mark fail "Port 80 does not answer on ${external_ip}"
-            echo "         The host firewall is only half of it on Oracle Cloud: the VCN"
-            echo "         security list (or NSG) must allow ingress 80 and 443 from"
-            echo "         0.0.0.0/0. Networking -> Virtual Cloud Networks -> Security Lists"
+            echo "         Packets are being dropped before they reach this machine, so the"
+            echo "         cloud firewall is the layer left. On Oracle Cloud:"
+            echo ""
+            echo "           Compute -> Instances -> this instance -> Primary VNIC -> Subnet"
+            echo "           -> Security Lists -> Add Ingress Rules"
+            echo ""
+            echo "         Two rules, Stateless = No, Source CIDR 0.0.0.0/0, TCP, ports 80"
+            echo "         and 443. If the VNIC also has a Network Security Group, add them"
+            echo "         there too - the two are enforced together."
             failures=$((failures + 1))
         fi
     fi
