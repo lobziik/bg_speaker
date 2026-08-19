@@ -1,16 +1,16 @@
-# BG3 Twitch Narrator Bot
+# Twitch Narrator Bot
 
-A Twitch Channel Points integration that reads chat messages in the dramatic voice style of a D&D narrator, with multilingual subtitles overlay for OBS.
+A Twitch Channel Points integration that reads chat messages in the dramatic voice of a fantasy narrator, with multilingual subtitles overlay for OBS.
 
 ## Features
 
 - **Channel Points Integration**: Only redeemed messages are narrated (spam filtering via cost)
-- **D&D Narrator Style**: LLM transforms casual chat into dramatic narrator prose
+- **Dramatic Narration**: LLM transforms casual chat into theatrical fantasy prose
 - **Swappable Providers**: Groq or Gemini for the LLM, Piper or Gemini for TTS, switched live from the Web UI
 - **Editable Prompts**: Every narration and moderation prompt is stored in the database and edited in the UI
 - **Fast Local TTS**: Piper TTS with high-quality pre-trained voices (MIT license), no API key needed
 - **Cloud TTS**: Gemini TTS with 30 multilingual voices, steered by a natural-language style prompt
-- **Web UI Dashboard**: BG3-themed configuration interface with HTMX
+- **Web UI Dashboard**: parchment-themed configuration interface with HTMX
 - **Auto-Reconnect**: Twitch services auto-connect on startup if previously authorized
 - **Configurable Languages**: Source, narrator, and subtitle languages are independent
 - **Provider Abstraction**: Swappable LLM, TTS, and Translation providers
@@ -98,7 +98,7 @@ uv run ruff format .
 
 ## Web UI
 
-The bot includes a BG3-themed web dashboard at `http://localhost:8000`:
+The bot includes a parchment-themed web dashboard at `http://localhost:8000`:
 
 - **Dashboard** (`/`): Queue status, rate limit countdown, global cooldown status, worker control
 - **Settings** (`/settings`): Providers, prompts, language, narrator, queue, overlay, reward, and global cooldown configuration
@@ -128,7 +128,7 @@ Gemini specifics:
   disable thinking and 2.0 Flash has no thinking config at all - the provider
   refuses those combinations at construction time instead of failing on the
   first redemption.
-- **Safety threshold**: defaults to `BLOCK_ONLY_HIGH` so ordinary D&D combat
+- **Safety threshold**: defaults to `BLOCK_ONLY_HIGH` so ordinary fantasy combat
   description is not rejected by Google's filter; the bot's own moderation step
   remains the Twitch-policy gate. A message the provider does block is treated
   as a policy rejection (points consumed, not refunded).
@@ -213,9 +213,9 @@ Day-to-day commands:
 ./narrator upgrade        # fetch the newest CLI, then restart
 ```
 
-State lives in two named volumes: `bg-narrator-data` (SQLite database and cached
-Piper voices) and `bg-narrator-caddy` (certificates). Configuration is written to
-`~/.config/bg-narrator/env`.
+State lives in two named volumes: `narrator-data` (SQLite database and cached
+Piper voices) and `narrator-caddy` (certificates). Configuration is written to
+`~/.config/narrator/env`.
 
 The image is defined in `container/` (Dockerfile, systemd units, init script,
 Caddyfile template). The root `Dockerfile` is a separate, simpler build used for

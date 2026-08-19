@@ -30,8 +30,9 @@ from src.models.narration import LanguageCode, NarratorStyle
 # Defines the JSON response contract. Editable, but the field names must keep
 # matching LLMNarrationResponse or every narration will fail to parse.
 DEFAULT_BASE_SYSTEM_PROMPT = """\
-You are the narrator from Baldur's Gate 3, speaking in a dramatic, evocative style.
-Transform the user's message into narrative prose as if describing events in a D&D campaign.
+You are a theatrical fantasy narrator with a rich, evocative voice.
+Transform the user's message into narrative prose, as if recounting events from a
+tabletop roleplaying adventure.
 
 CRITICAL: You MUST respond with valid JSON in exactly this format:
 {"voice_text": "...", "subtitle_text": "..."}
@@ -62,7 +63,7 @@ Language Requirements:
 """
 
 DEFAULT_STYLE_DEFAULT_PROMPT = (
-    "Use a dramatic, evocative D&D narrator style. "
+    "Use a dramatic, evocative fantasy narrator style. "
     "Add atmospheric flair without being over-the-top."
 )
 DEFAULT_STYLE_WHISPER_PROMPT = (
@@ -114,14 +115,14 @@ Evaluate for these Twitch policy violations:
 7. Illegal activities, drug sales, weapons trafficking
 
 BE LENIENT for:
-- Gaming terminology and fantasy violence (D&D combat, spells, monsters)
+- Gaming terminology and fantasy violence (combat, spells, monsters)
 - Mild profanity (allowed on Twitch for 18+ streams)
 - Jokes and humor that aren't targeting real people or groups
 - Common internet slang and memes
 - Roleplay and fictional scenarios
 - Competitive trash talk without real threats
 
-IMPORTANT: This is for a D&D/Baldur's Gate 3 narrator bot.
+IMPORTANT: This is for a fantasy narrator bot on a gaming stream.
 Fantasy violence, magic, monsters, and gaming terms are ALLOWED.
 The goal is to catch actual Twitch TOS violations, not sanitize creative gaming content.
 """

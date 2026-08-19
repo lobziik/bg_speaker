@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BG3 Twitch Narrator Bot - A Twitch Channel Points integration that reads chat messages in Baldur's Gate 3 narrator voice style, with multilingual subtitles overlay for OBS. Transforms casual chat into dramatic D&D narrator prose using LLM, then synthesizes speech with TTS.
+Twitch Narrator Bot - A Twitch Channel Points integration that reads chat messages in the voice of a theatrical fantasy narrator, with multilingual subtitles overlay for OBS. Transforms casual chat into dramatic narrator prose using LLM, then synthesizes speech with TTS.
 
-**Core Flow:** Twitch Channel Points Redemption → LLM (D&D formatting) → Translation (if needed) → TTS (Piper) → WebSocket → OBS Browser Source (audio + subtitles)
+**Core Flow:** Twitch Channel Points Redemption → LLM (narrator formatting) → Translation (if needed) → TTS (Piper) → WebSocket → OBS Browser Source (audio + subtitles)
 
 ## Build & Development Commands
 
@@ -179,11 +179,11 @@ On failure: logs warning and continues without Twitch (dashboard shows "disconne
   - `test.py`: Manual narration testing
   - `logs.py`: Narration history with filtering/pagination
 - `src/templates/`: Jinja2 templates
-  - `base.html`: Base layout with BG3-themed sidebar
+  - `base.html`: Base layout with parchment-themed sidebar
   - `pages/`: Full page templates (dashboard, settings, queue, test, logs)
   - `partials/`: HTMX partial templates for live updates
 - `src/static/`: Static assets
-  - `css/main.css`: BG3 theme (dark parchment, gold accents)
+  - `css/main.css`: Parchment theme (dark background, gold accents)
   - `css/components.css`: Reusable component styles
   - `js/htmx.min.js`: HTMX 2.0.4 bundled locally
   - `js/app.js`: WebSocket integration for live updates

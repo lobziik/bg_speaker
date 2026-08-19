@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 1 establishes the foundational architecture for the BG3 Twitch Narrator Bot. The goal is to create a working CLI tool that converts text to narrated audio using the LLM → TTS pipeline.
+Phase 1 establishes the foundational architecture for the Twitch Narrator Bot. The goal is to create a working CLI tool that converts text to narrated audio using the LLM → TTS pipeline.
 
 ## Completed Tasks
 

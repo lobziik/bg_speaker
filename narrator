@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # =============================================================================
-# narrator - BG3 Twitch Narrator Bot deployment CLI
+# narrator - Twitch Narrator Bot deployment CLI
 #
 # Runs the all-in-one container (Caddy + app under systemd) on a single host.
 # Built for a fresh OCI Ampere VM, but works anywhere podman or docker runs.
@@ -14,10 +14,10 @@ VERSION="dev"
 VERSION="${NARRATOR_VERSION:-$VERSION}"
 REPO="${NARRATOR_IMAGE:-ghcr.io/lobziik/bg_speaker}"
 RELEASES_URL="https://github.com/lobziik/bg_speaker/releases/latest/download"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bg-narrator"
-CONTAINER_NAME="bg-narrator"
-DATA_VOLUME="bg-narrator-data"
-CADDY_VOLUME="bg-narrator-caddy"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/narrator"
+CONTAINER_NAME="narrator"
+DATA_VOLUME="narrator-data"
+CADDY_VOLUME="narrator-caddy"
 RUNTIME=""
 
 # =============================================================================
@@ -241,7 +241,7 @@ prompt_required() {
 
 collect_input() {
     echo ""
-    echo "=== BG3 Narrator Configuration ==="
+    echo "=== Narrator Configuration ==="
     echo ""
 
     prompt_required DOMAIN "Domain pointing at this server (e.g. narrator.example.com)"
@@ -487,7 +487,7 @@ wait_for_health() {
 
 cmd_install() {
     echo ""
-    echo "BG3 Narrator installer v$VERSION"
+    echo "Narrator installer v$VERSION"
     echo ""
 
     check_root
@@ -518,7 +518,7 @@ cmd_install() {
 
 cmd_help() {
     cat << 'EOF'
-narrator - BG3 Twitch Narrator Bot deployment CLI
+narrator - Twitch Narrator Bot deployment CLI
 
 Usage: ./narrator <command>
 
@@ -535,8 +535,8 @@ Commands:
   upgrade       Fetch the latest CLI, then restart
   help          Show this message
 
-Configuration: ~/.config/bg-narrator/env
-Data volumes:  bg-narrator-data (database + Piper voices), bg-narrator-caddy (certificates)
+Configuration: ~/.config/narrator/env
+Data volumes:  narrator-data (database + Piper voices), narrator-caddy (certificates)
 
 Documentation: https://github.com/lobziik/bg_speaker
 EOF
@@ -546,7 +546,7 @@ print_success() {
     cat << EOF
 
 ╔═══════════════════════════════════════════╗
-║     BG3 Narrator installed successfully   ║
+║      Narrator installed successfully      ║
 ╚═══════════════════════════════════════════╝
 
 Dashboard: https://$DOMAIN          (login: $ADMIN_USERNAME)

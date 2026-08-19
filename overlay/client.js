@@ -1,5 +1,5 @@
 /**
- * BG3 Narrator Overlay WebSocket Client
+ * Narrator Overlay WebSocket Client
  *
  * Connects to the narrator bot server via WebSocket and handles:
  * - Audio playback

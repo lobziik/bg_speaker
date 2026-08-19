@@ -1,6 +1,6 @@
-# BG3 Twitch Narrator Bot
+# Twitch Narrator Bot
 
-A Twitch Channel Points integration that reads chat messages in the dramatic voice style of a D&D narrator, with multilingual subtitles overlay for OBS.
+A Twitch Channel Points integration that reads chat messages in the dramatic voice of a fantasy narrator, with multilingual subtitles overlay for OBS.
 
 ## Overview
 
@@ -9,7 +9,7 @@ A Twitch Channel Points integration that reads chat messages in the dramatic voi
 ```
 Twitch Channel Points Redemption (message in source_lang)
     ↓
-LLM (Groq) - D&D style formatting
+LLM (Groq) - narrator style formatting
     ↓
 [If source_lang ≠ narrator_lang] → Translation
     ↓
@@ -23,7 +23,7 @@ Audio playback + subtitles in subtitle_lang
 ### Key Features
 
 - **Channel Points Integration**: Only redeemed messages are narrated (spam filtering via cost)
-- **D&D Narrator Style**: LLM transforms casual chat into dramatic narrator prose
+- **Dramatic Narration**: LLM transforms casual chat into theatrical fantasy prose
 - **Fast Local TTS**: Piper TTS with high-quality pre-trained voices (MIT license)
 - **Configurable Languages**: Source, narrator, and subtitle languages are independent
 - **Smart Translation**: Skips translation when source and narrator languages match
@@ -80,7 +80,7 @@ Audio playback + subtitles in subtitle_lang
                                                         │                 │
                                                         │ - Audio player  │
                                                         │ - Subtitle UI   │
-                                                        │ - BG3 styling   │
+                                                        │ - themed styling│
                                                         └─────────────────┘
 ```
 
@@ -110,7 +110,7 @@ narrator-bot/
 │   ├── default.yaml          # Default configuration
 │   ├── config.schema.json    # JSON Schema for validation
 │   └── prompts/
-│       ├── narrator.txt      # D&D narrator system prompt
+│       ├── narrator.txt      # narrator system prompt
 │       └── templates/        # Message format templates
 │           ├── whisper.txt
 │           ├── proclaim.txt
@@ -232,7 +232,7 @@ narrator-bot/
 │
 ├── overlay/
 │   ├── index.html            # OBS Browser Source
-│   ├── style.css             # BG3-themed styling
+│   ├── style.css             # parchment-themed styling
 │   └── overlay.js            # WebSocket client & audio player
 │
 └── tests/
@@ -1446,7 +1446,7 @@ DATABASE_URL=sqlite:///data/narrator.db
 # config/default.yaml — Safe to commit
 
 app:
-  name: "BG3 Narrator Bot"
+  name: "Narrator Bot"
   debug: false
   log_level: "INFO"
 
@@ -2263,7 +2263,7 @@ class PromptBuilder:
     ) -> str:
         style_desc = self._get_style_description(style)
         
-        return f"""You are the Narrator from Baldur's Gate 3. Your voice is rich, dramatic, and captivating.
+        return f"""You are a theatrical fantasy Narrator. Your voice is rich, dramatic, and captivating.
 
 A viewer named "{user}" has sent a message: "{message}"
 
@@ -2295,7 +2295,7 @@ IMPORTANT:
     ) -> str:
         style_desc = self._get_style_description(style)
         
-        return f"""You are the Narrator from Baldur's Gate 3. Your voice is rich, dramatic, and captivating.
+        return f"""You are a theatrical fantasy Narrator. Your voice is rich, dramatic, and captivating.
 
 A viewer named "{user}" has sent a message: "{message}"
 
@@ -2449,7 +2449,7 @@ interface Pong {
 </html>
 ```
 
-### Styling (BG3 Theme)
+### Styling (Parchment Theme)
 
 ```css
 /* overlay/style.css */
@@ -2661,7 +2661,7 @@ overlay.startPingInterval();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}BG3 Narrator Bot{% endblock %}</title>
+    <title>{% block title %}Narrator Bot{% endblock %}</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://unpkg.com/htmx.org@2.0.0"></script>
     <script src="https://unpkg.com/htmx-ext-ws@2.0.0/ws.js"></script>

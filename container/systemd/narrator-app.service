@@ -1,5 +1,5 @@
 [Unit]
-Description=BG3 Twitch narrator bot (FastAPI + queue worker)
+Description=Twitch narrator bot (FastAPI + queue worker)
 Documentation=https://github.com/lobziik/bg_speaker
 After=narrator-init.service network.target
 Requires=narrator-init.service

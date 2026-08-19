@@ -481,4 +481,4 @@ class TestEditablePrompts:
         )
 
         system_prompt = mock_llm_provider.generate.call_args.kwargs["system_prompt"]
-        assert "You are the narrator from Baldur's Gate 3" in system_prompt
+        assert "You are a theatrical fantasy narrator" in system_prompt

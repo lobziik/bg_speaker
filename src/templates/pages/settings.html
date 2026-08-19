@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Settings - BG3 Narrator{% endblock %}
+{% block title %}Settings - Narrator{% endblock %}
 
 {% block header %}Settings{% endblock %}
 
@@ -219,7 +219,7 @@
                         {% endfor %}
                     </select>
                     <small class="help-text">
-                        Google's own filter. BLOCK_ONLY_HIGH lets D&D combat through while the
+                        Google's own filter. BLOCK_ONLY_HIGH lets fantasy combat through while the
                         bot's moderation step still enforces Twitch policy.
                     </small>
                 </div>
@@ -398,7 +398,7 @@
                 <input type="checkbox" name="bypass_llm" {% if narrator.bypass_llm %}checked{% endif %}>
                 Bypass narrator (read messages as-is)
             </label>
-            <small class="help-text">Skip D&D narration style, output raw message directly</small>
+            <small class="help-text">Skip narration styling, output raw message directly</small>
         </div>
 
         <div class="form-group">
@@ -438,7 +438,7 @@
         <div class="form-group">
             <label for="system_prompt">Custom System Prompt</label>
             <textarea name="system_prompt" id="system_prompt" rows="6"
-                      placeholder="Leave empty to use default D&D narrator prompt">{{ narrator.system_prompt }}</textarea>
+                      placeholder="Leave empty to use the default narrator prompt">{{ narrator.system_prompt }}</textarea>
             <small class="help-text">Additional instructions for the narrator (added to the base prompt)</small>
         </div>
 

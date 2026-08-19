@@ -1,8 +1,8 @@
-# BG3 Narrator Bot - Default Configuration
+# Narrator Bot - Default Configuration
 # Safe to commit to version control
 
 app:
-  name: "BG3 Narrator Bot"
+  name: "Narrator Bot"
   debug: false
   log_level: "INFO"
 
