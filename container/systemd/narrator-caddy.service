@@ -1,0 +1,30 @@
+[Unit]
+Description=Caddy reverse proxy with automatic TLS for the narrator
+Documentation=https://github.com/lobziik/bg_speaker
+After=narrator-init.service network.target
+Requires=narrator-init.service
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile --force
+Restart=always
+RestartSec=5
+
+# Certificates and Caddy's own state live in a volume so a container restart
+# does not re-issue certificates and burn Let's Encrypt rate limits.
+Environment=XDG_DATA_HOME=/var/lib
+Environment=XDG_CONFIG_HOME=/var/lib
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+ReadWritePaths=/var/lib/caddy
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

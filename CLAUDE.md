@@ -227,6 +227,29 @@ Required env vars: `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_CHANNEL`,
 least one LLM API key (`GROQ_API_KEY` or `GEMINI_API_KEY`). `GEMINI_API_KEY` powers both the Gemini
 LLM and the Gemini TTS provider.
 
+## Deployment
+
+Two container builds exist, deliberately:
+
+- `Dockerfile` (repo root): plain app image used by Railway (`railway.toml`). No TLS, no systemd.
+- `container/Dockerfile`: the release image for self-hosting. UBI10-init base running systemd with
+  three units - `narrator-init` (renders `/etc/narrator/env` and the Caddyfile, fails fast on a
+  missing variable), `narrator-app` (uvicorn on 127.0.0.1:8000 as the `narrator` user) and
+  `narrator-caddy` (TLS termination, automatic Let's Encrypt).
+
+Gotchas that are easy to reintroduce:
+
+- systemd does not inherit the container environment. Every variable `narrator-init.sh` reads must
+  be listed in `PassEnvironment=` in `narrator-init.service`.
+- `COPY` preserves host file modes; the Dockerfile normalises them with `chmod -R a+rX` so the
+  unprivileged `narrator` user can read the code.
+- buildah produces OCI images, which drop the Dockerfile `HEALTHCHECK`. The `narrator` CLI therefore
+  passes `--health-cmd` at `podman run` time.
+
+`.github/workflows/release.yml` builds amd64 and arm64 on native runners with buildah, pushes both to
+GHCR, joins them into a manifest, and attaches the `narrator` CLI to the GitHub release (with
+`VERSION="dev"` rewritten to the tag). Deployment on the VM is `./narrator install`.
+
 ## Testing
 
 Tests in `tests/` directory mirror `src/` structure. Use `pytest-asyncio` for async tests. Coverage target: 80%.

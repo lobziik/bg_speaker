@@ -18,6 +18,7 @@ A Twitch Channel Points integration that reads chat messages in the dramatic voi
 - **Global Cooldown**: Configurable pause after each narration (default 5 min) to prevent spam
 - **OBS Overlay**: WebSocket-based overlay with subtitles and audio
 - **Type Safety**: Pydantic v2 strict mode, mypy + ty, typed protocols everywhere
+- **Single-Container Deploy**: systemd + Caddy image with automatic TLS, one command on a fresh VM
 
 ## Quick Start
 
@@ -176,6 +177,49 @@ save with a message naming the section - nothing is stored until it validates.
 Write `$$` for a literal dollar sign. **Reset to Defaults** restores the shipped
 text, which is also how you pick up default improvements from a new release:
 seeding never overwrites prompts you have edited.
+
+## Deployment
+
+The release image bundles the app and Caddy under systemd in a single container,
+so a fresh VM (built and tested on OCI Ampere / arm64) needs only a container
+runtime. Images are published to `ghcr.io/lobziik/bg_speaker` for amd64 and
+arm64 on every version tag.
+
+```bash
+# On the VM: grab the CLI from the latest release
+curl -fsSLO https://github.com/lobziik/bg_speaker/releases/latest/download/narrator
+chmod +x narrator
+
+# Interactive setup: prompts for domain, keys and dashboard login,
+# pulls the image and starts the container
+sudo ./narrator install
+```
+
+Requirements:
+
+- A DNS A record pointing at the VM - Caddy issues a Let's Encrypt certificate
+  automatically on first start.
+- TCP 80 and 443 reachable. On Oracle Cloud, open them in **both** the host
+  firewall and the VCN security list.
+- Set the Twitch OAuth redirect URL to `https://<your-domain>/auth/callback`.
+
+Day-to-day commands:
+
+```bash
+./narrator status         # container + service status
+./narrator logs app       # narrator application log
+./narrator logs caddy     # TLS / proxy log
+./narrator restart
+./narrator upgrade        # fetch the newest CLI, then restart
+```
+
+State lives in two named volumes: `bg-narrator-data` (SQLite database and cached
+Piper voices) and `bg-narrator-caddy` (certificates). Configuration is written to
+`~/.config/bg-narrator/env`.
+
+The image is defined in `container/` (Dockerfile, systemd units, init script,
+Caddyfile template). The root `Dockerfile` is a separate, simpler build used for
+Railway and does not include Caddy.
 
 ## OBS Overlay
 
