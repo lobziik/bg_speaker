@@ -238,7 +238,7 @@ class TestWebSocketManagerQueueEvents:
         assert msg["type"] == "queue_update"
         assert msg["event"] == "item_added"
         assert msg["queue_length"] == 2
-        msg_items = cast(list[object], msg["items"])
+        msg_items = cast("list[object]", msg["items"])
         assert len(msg_items) == 2
 
 

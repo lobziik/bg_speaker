@@ -42,6 +42,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     from src.services.global_cooldown import CooldownStatus, GlobalCooldownManager
 
     settings_repo = SettingsRepository(state.db.connection)
+
+    # Seed the editable prompt templates on a fresh install so Settings -> Prompts
+    # opens with the real defaults rather than an empty form.
+    from src.providers.llm.prompts import PromptSettings
+
+    if await settings_repo.set_if_absent("prompts", PromptSettings()):
+        logger.info("default_prompts_seeded")
+
     reward_settings = await settings_repo.get(
         "reward", TwitchRewardSettings, TwitchRewardSettings()
     )
@@ -92,52 +100,30 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     else:
         logger.info("no_twitch_tokens", message="Skipping Twitch init - not authorized")
 
-    # Initialize pipeline and worker if LLM key is available
-    if state.env.groq_api_key:
-        from src.models.settings import PiperSettings
-        from src.providers.llm.groq import GroqLLMProvider
-        from src.providers.tts.piper import PiperTTSProvider
-        from src.services.pipeline import NarrationPipeline
-        from src.services.worker import QueueWorker
+    # Build the providers selected in Settings -> Providers and start the worker.
+    # Missing credentials are not fatal: the dashboard stays up so the operator
+    # can see what is wrong and switch providers once the key is in place.
+    from src.providers.factory import ProviderConfigurationError
 
-        # Note: TTS voice overrides are loaded per-request in the worker
-        # to ensure settings changes take effect immediately
-        llm_provider = GroqLLMProvider(api_key=state.env.groq_api_key)
-        tts_provider = PiperTTSProvider()
-
-        # Start TTS provider cleanup task and store reference for shutdown
-        await tts_provider.start()
-        state.tts_provider = tts_provider
-
-        # Load and apply Piper TTS settings (speed, variation)
-        piper_settings = await settings_repo.get(
-            "piper", PiperSettings, PiperSettings()
+    try:
+        await state.rebuild_pipeline()
+        logger.info(
+            "queue_worker_started",
+            llm_provider=state.pipeline.llm_provider_name if state.pipeline else None,
+            tts_provider=state.pipeline.tts_provider_name if state.pipeline else None,
         )
-        if piper_settings:
-            tts_provider.update_settings(
-                length_scale=piper_settings.length_scale,
-                noise_scale=piper_settings.noise_scale,
-                noise_w=piper_settings.noise_w,
-            )
-
-        state.pipeline = NarrationPipeline(
-            llm_provider=llm_provider,
-            tts_provider=tts_provider,
+    except ProviderConfigurationError as e:
+        logger.warning(
+            "providers_not_configured",
+            message="Worker not started - fix the provider configuration and retry",
+            error=str(e),
         )
-
-        state.worker = QueueWorker(
-            queue=state.queue,
-            pipeline=state.pipeline,
-            ws_manager=ws_manager,
-            rewards_controller=state.twitch_rewards,
-            db_connection=state.db.connection,
-            global_cooldown=state.global_cooldown,
+    except ValueError as e:
+        logger.warning(
+            "provider_settings_invalid",
+            message="Worker not started - stored provider settings are invalid",
+            error=str(e),
         )
-
-        await state.worker.start()
-        logger.info("queue_worker_started")
-    else:
-        logger.warning("no_llm_api_key", message="Worker not started - no GROQ_API_KEY")
 
     logger.info("app_started")
 

@@ -7,8 +7,16 @@ from dataclasses import dataclass
 import structlog
 
 from src.models.narration import LanguageCode, NarrationRequest, NarrationResult
-from src.providers.llm.base import LLMProvider, LLMResponseParseError
-from src.providers.llm.prompts import build_system_prompt
+from src.providers.llm.base import (
+    LLMContentBlockedError,
+    LLMProvider,
+    LLMResponseParseError,
+)
+from src.providers.llm.prompts import (
+    PromptSettings,
+    build_moderation_prompt,
+    build_system_prompt,
+)
 from src.providers.tts.base import TTSProvider
 
 logger = structlog.get_logger()
@@ -107,11 +115,22 @@ class NarrationPipeline:
         """
         return self._tts
 
+    @property
+    def llm_provider_name(self) -> str:
+        """Name of the active LLM provider (for logging and history)."""
+        return self._llm.name
+
+    @property
+    def tts_provider_name(self) -> str:
+        """Name of the active TTS provider (for logging and history)."""
+        return self._tts.name
+
     async def _check_moderation(
         self,
         user: str,
         message: str,
         request_id: str,
+        prompts: PromptSettings,
     ) -> int:
         """Check message for Twitch policy compliance.
 
@@ -119,6 +138,7 @@ class NarrationPipeline:
             user: Username who sent the message.
             message: Original message to validate.
             request_id: Request ID for logging.
+            prompts: Editable prompt sections from settings.
 
         Returns:
             Moderation latency in milliseconds.
@@ -136,7 +156,28 @@ class NarrationPipeline:
         moderation_start = time.monotonic()
 
         try:
-            result = await self._llm.moderate(user=user, message=message)
+            result = await self._llm.moderate(
+                user=user,
+                system_prompt=prompts.moderation_system,
+                user_prompt=build_moderation_prompt(prompts, message=message, user=user),
+            )
+        except LLMContentBlockedError as e:
+            # The provider's own safety filter refused the message. Treat it as
+            # a policy rejection, not an outage: points are consumed, not refunded.
+            blocked_latency_ms = int((time.monotonic() - moderation_start) * 1000)
+            logger.warning(
+                "pipeline_moderation_provider_blocked",
+                request_id=request_id,
+                user=user,
+                reason=e.reason,
+                latency_ms=blocked_latency_ms,
+            )
+            raise ModerationRejectedError(
+                message=message,
+                reason=f"Blocked by the LLM provider's safety filter ({e.reason})",
+                category="provider_safety_filter",
+                latency_ms=blocked_latency_ms,
+            ) from e
         except LLMResponseParseError as e:
             # FAIL FAST: If we can't parse moderation response, reject
             parse_error_latency_ms = int((time.monotonic() - moderation_start) * 1000)
@@ -185,6 +226,8 @@ class NarrationPipeline:
         bypass_llm: bool = False,
         voice_id: str | None = None,
         enable_moderation: bool = True,
+        custom_prompt: str | None = None,
+        prompts: PromptSettings | None = None,
     ) -> tuple[NarrationResult, PipelineMetrics]:
         """Process a narration request through the pipeline.
 
@@ -196,14 +239,24 @@ class NarrationPipeline:
             bypass_llm: If True, skip LLM formatting and use raw message.
             voice_id: Explicit TTS voice ID (overrides language-based selection).
             enable_moderation: If True, validate message for Twitch compliance.
+            custom_prompt: Narrator behaviour prompt for this run. When None the
+                prompt supplied at construction time is used; passing it per
+                request lets settings changes take effect without a rebuild.
+            prompts: Editable prompt sections from settings. When None the
+                built-in defaults are used.
 
         Returns:
             Tuple of (NarrationResult, PipelineMetrics).
 
         Raises:
             LLMResponseParseError: If LLM returns invalid JSON.
-            ModerationRejectedError: If message violates Twitch policy.
+            ModerationRejectedError: If message violates Twitch policy, or the
+                LLM provider's own safety filter blocked it.
         """
+        effective_custom_prompt = (
+            custom_prompt if custom_prompt is not None else self._custom_prompt
+        )
+        effective_prompts = prompts if prompts is not None else PromptSettings()
         request_id = str(uuid.uuid4())
         start_time = time.monotonic()
         moderation_latency_ms = 0
@@ -227,6 +280,7 @@ class NarrationPipeline:
                 user=request.user,
                 message=request.message,
                 request_id=request_id,
+                prompts=effective_prompts,
             )
 
         # Step 1: LLM formatting (or bypass)
@@ -243,10 +297,11 @@ class NarrationPipeline:
         else:
             # Build complete system prompt with language and style instructions
             system_prompt = build_system_prompt(
+                effective_prompts,
                 narrator_lang=narrator_lang,
                 subtitle_lang=subtitle_lang,
                 auto_translate=auto_translate,
-                custom_prompt=self._custom_prompt,
+                custom_prompt=effective_custom_prompt,
                 style=request.style,
             )
 
@@ -256,13 +311,29 @@ class NarrationPipeline:
                 llm_provider=self._llm.name,
             )
             llm_start = time.monotonic()
-            # This may raise LLMResponseParseError - fail fast!
-            llm_response = await self._llm.generate(
-                user=request.user,
-                message=request.message,
-                system_prompt=system_prompt,
-                style=request.style,
-            )
+            try:
+                # This may raise LLMResponseParseError - fail fast!
+                llm_response = await self._llm.generate(
+                    user=request.user,
+                    message=request.message,
+                    system_prompt=system_prompt,
+                    style=request.style,
+                )
+            except LLMContentBlockedError as e:
+                # Same treatment as a moderation rejection: the provider refused
+                # the content, so the redemption is consumed rather than refunded.
+                logger.warning(
+                    "pipeline_llm_provider_blocked",
+                    request_id=request_id,
+                    user=request.user,
+                    reason=e.reason,
+                )
+                raise ModerationRejectedError(
+                    message=request.message,
+                    reason=f"Blocked by the LLM provider's safety filter ({e.reason})",
+                    category="provider_safety_filter",
+                    latency_ms=moderation_latency_ms,
+                ) from e
             llm_latency_ms = int((time.monotonic() - llm_start) * 1000)
 
             voice_text = llm_response.voice_text

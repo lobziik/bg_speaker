@@ -127,14 +127,14 @@ class TestPiperTTSProvider:
 
         assert schema["type"] == "object"
         assert "properties" in schema
-        properties = cast(dict[str, object], schema["properties"])
+        properties = cast("dict[str, object]", schema["properties"])
         assert "voice" in properties
         assert "length_scale" in properties
         assert "noise_scale" in properties
 
         # Check voice enum contains expected voices
-        voice_props = cast(dict[str, object], properties["voice"])
-        voice_enum = cast(list[str], voice_props["enum"])
+        voice_props = cast("dict[str, object]", properties["voice"])
+        voice_enum = cast("list[str]", voice_props["enum"])
         assert "en_US-lessac-medium" in voice_enum
 
     @pytest.mark.asyncio

@@ -416,3 +416,71 @@ class TestWorkerWithRewards:
         await worker.stop()
 
         mock_rewards.cancel_redemption.assert_called_once_with("redemption-456")
+
+
+class TestWorkerPipelineSwap:
+    """Swapping providers at runtime without restarting the worker."""
+
+    @pytest.mark.asyncio
+    async def test_set_pipeline_used_for_next_item(
+        self,
+        worker: QueueWorker,
+        queue: NarrationQueue,
+        mock_pipeline: MagicMock,
+    ) -> None:
+        """Items queued after the swap run through the replacement pipeline."""
+        replacement = MagicMock(spec=NarrationPipeline)
+        replacement.llm_provider_name = "gemini"
+        replacement.tts_provider_name = "gemini"
+        replacement.process = mock_pipeline.process
+        mock_pipeline.llm_provider_name = "groq"
+        mock_pipeline.tts_provider_name = "piper"
+
+        await worker.set_pipeline(replacement)
+        await worker.start()
+
+        await queue.add(user="TestUser", message="After the swap")
+        await asyncio.sleep(0.3)
+        await worker.stop()
+
+        assert worker._pipeline is replacement
+
+    @pytest.mark.asyncio
+    async def test_set_pipeline_waits_for_in_flight_item(
+        self,
+        worker: QueueWorker,
+        queue: NarrationQueue,
+        mock_pipeline: MagicMock,
+    ) -> None:
+        """A swap blocks until the narration being processed completes.
+
+        This is what makes it safe to close the previous providers afterwards.
+        """
+        release = asyncio.Event()
+        original_process = mock_pipeline.process
+
+        async def slow_process(*args: object, **kwargs: object) -> object:
+            await release.wait()
+            return await original_process(*args, **kwargs)
+
+        mock_pipeline.process = slow_process
+        mock_pipeline.llm_provider_name = "groq"
+        mock_pipeline.tts_provider_name = "piper"
+
+        replacement = MagicMock(spec=NarrationPipeline)
+        replacement.llm_provider_name = "gemini"
+        replacement.tts_provider_name = "gemini"
+
+        await worker.start()
+        await queue.add(user="TestUser", message="In flight")
+        await asyncio.sleep(0.1)
+
+        swap = asyncio.create_task(worker.set_pipeline(replacement))
+        await asyncio.sleep(0.1)
+        assert not swap.done(), "swap must wait for the in-flight narration"
+
+        release.set()
+        await asyncio.wait_for(swap, timeout=5.0)
+        await worker.stop()
+
+        assert worker._pipeline is replacement

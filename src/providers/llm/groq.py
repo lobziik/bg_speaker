@@ -17,10 +17,6 @@ from src.providers.llm.base import (
     Model,
     ModerationResult,
 )
-from src.providers.llm.prompts import (
-    MODERATION_SYSTEM_PROMPT,
-    build_moderation_prompt,
-)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -300,14 +296,16 @@ class GroqLLMProvider:
     async def moderate(
         self,
         user: str,
-        message: str,
+        system_prompt: str,
+        user_prompt: str,
         model: str | None = None,
     ) -> ModerationResult:
-        """Check message for Twitch policy compliance.
+        """Check a message for Twitch policy compliance.
 
         Args:
-            user: Username who sent the message.
-            message: Message to validate.
+            user: Username who sent the message, for logging context.
+            system_prompt: Moderation system prompt.
+            user_prompt: User prompt carrying the message under review.
             model: Optional model ID override (defaults to provider's configured model).
 
         Returns:
@@ -322,14 +320,13 @@ class GroqLLMProvider:
             "llm_moderate_start",
             user=user,
             model=effective_model,
-            message_length=len(message),
+            prompt_length=len(user_prompt),
         )
 
-        user_prompt = build_moderation_prompt(message, user)
         raw_response = await self.generate_raw(
             user=user,
             message=user_prompt,
-            system_prompt=MODERATION_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             model=effective_model,
         )
 
@@ -449,6 +446,11 @@ class GroqLLMProvider:
         except (APIConnectionError, APIStatusError) as e:
             logger.warning("groq_health_check_failed", error=str(e))
             return False
+
+    async def close(self) -> None:
+        """Close the underlying async HTTP client."""
+        await self._client.close()
+        logger.debug("groq_client_closed")
 
     def get_settings_schema(self) -> dict[str, object]:
         """JSON Schema for provider settings."""

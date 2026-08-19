@@ -51,6 +51,22 @@ class TTSProvider(Protocol):
         """Whether provider supports voice cloning."""
         ...
 
+    async def start(self) -> None:
+        """Start any background work the provider needs.
+
+        Called once during application startup, before the first synthesis.
+        Implementations must be safe to call multiple times.
+        """
+        ...
+
+    async def close(self) -> None:
+        """Release provider resources (models, HTTP clients, background tasks).
+
+        Called on application shutdown and whenever the active provider is
+        swapped at runtime. Implementations must be safe to call multiple times.
+        """
+        ...
+
     async def synthesize(
         self,
         text: str,

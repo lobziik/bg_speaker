@@ -18,6 +18,7 @@ from src.db.repositories.narration_log import NarrationLogRepository
 from src.db.repositories.settings import SettingsRepository
 from src.models.narration import LanguageCode, NarrationRequest, NarrationResult
 from src.models.settings import LanguageSettings, NarratorSettings, TTSVoiceSettings
+from src.providers.llm.prompts import PromptSettings
 from src.services.pipeline import ModerationRejectedError, NarrationPipeline
 from src.services.queue import NarrationQueue, QueueItem
 
@@ -67,11 +68,34 @@ class QueueWorker:
         self._global_cooldown = global_cooldown
         self._task: asyncio.Task[None] | None = None
         self._running = False
+        # Held for the duration of a single narration so the pipeline can be
+        # swapped between items without yanking providers out from under one.
+        self._processing_lock = asyncio.Lock()
 
     @property
     def is_running(self) -> bool:
         """Check if worker is running."""
         return self._running
+
+    async def set_pipeline(self, pipeline: NarrationPipeline) -> None:
+        """Swap the narration pipeline used for subsequent items.
+
+        Waits for any in-flight narration to finish first, so the caller can
+        safely close the previous pipeline's providers once this returns.
+
+        Args:
+            pipeline: The pipeline to use from the next queue item onwards.
+        """
+        async with self._processing_lock:
+            previous = self._pipeline
+            self._pipeline = pipeline
+            logger.info(
+                "queue_worker_pipeline_swapped",
+                previous_llm=previous.llm_provider_name,
+                previous_tts=previous.tts_provider_name,
+                llm_provider=pipeline.llm_provider_name,
+                tts_provider=pipeline.tts_provider_name,
+            )
 
     async def start(self) -> None:
         """Start the worker background task."""
@@ -116,7 +140,16 @@ class QueueWorker:
                 await asyncio.sleep(1.0)
 
     async def _process_item(self, item: QueueItem) -> None:
-        """Process a single queue item.
+        """Process a single queue item, holding the pipeline swap lock.
+
+        Args:
+            item: The queue item to process.
+        """
+        async with self._processing_lock:
+            await self._run_pipeline_for_item(item)
+
+    async def _run_pipeline_for_item(self, item: QueueItem) -> None:
+        """Run one queue item through the pipeline and publish the result.
 
         Args:
             item: The queue item to process.
@@ -133,6 +166,8 @@ class QueueWorker:
             bypass_llm = False
             auto_translate = True
             enable_moderation = True
+            custom_prompt = ""
+            prompts = PromptSettings()
             narrator_lang = LanguageCode.EN
             subtitle_lang = LanguageCode.EN
             voice_id: str | None = None
@@ -148,6 +183,12 @@ class QueueWorker:
                     bypass_llm = narrator_settings.bypass_llm
                     auto_translate = narrator_settings.auto_translate
                     enable_moderation = narrator_settings.enable_moderation
+                    custom_prompt = narrator_settings.system_prompt
+
+                # Load the operator-editable prompt sections
+                prompts = await settings_repo.get_or_default(
+                    "prompts", PromptSettings, PromptSettings()
+                )
 
                 # Load language settings for TTS voice selection
                 language_settings = await settings_repo.get(
@@ -180,6 +221,8 @@ class QueueWorker:
                 bypass_llm=bypass_llm,
                 voice_id=voice_id,
                 enable_moderation=enable_moderation,
+                custom_prompt=custom_prompt,
+                prompts=prompts,
             )
 
             # Broadcast to WebSocket clients
@@ -353,8 +396,8 @@ class QueueWorker:
                 status=status,
                 narrator_lang=narrator_lang,
                 subtitle_lang=subtitle_lang,
-                llm_provider="groq",  # TODO: Get from pipeline
-                tts_provider="piper",  # TODO: Get from pipeline
+                llm_provider=self._pipeline.llm_provider_name,
+                tts_provider=self._pipeline.tts_provider_name,
                 latency_moderation_ms=moderation_latency_ms,
                 latency_llm_ms=llm_latency_ms,
                 latency_tts_ms=tts_latency_ms,

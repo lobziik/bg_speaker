@@ -72,6 +72,23 @@ class SettingsRepository:
             # This is necessary because strict=True doesn't coerce strings to datetime.
             return model.model_validate_json(row[0])
 
+    async def get_or_default(self, key: str, model: type[T], default: T) -> T:
+        """Get typed setting by key, falling back to a default.
+
+        Same as :meth:`get` but with a non-optional return type, so callers
+        that always have a sensible default do not need to narrow the result.
+
+        Args:
+            key: Setting key.
+            model: Pydantic model class to deserialize to.
+            default: Value to return when the key is not stored.
+
+        Returns:
+            Deserialized model, or ``default`` if the key is absent.
+        """
+        stored = await self.get(key, model)
+        return stored if stored is not None else default
+
     async def set(self, key: str, value: T) -> None:
         """Save typed setting.
 
@@ -92,6 +109,31 @@ class SettingsRepository:
             (key, value.model_dump_json()),
         )
         await self._conn.commit()
+
+    async def set_if_absent(self, key: str, value: T) -> bool:
+        """Store a setting only when the key does not exist yet.
+
+        Used to seed editable defaults (such as prompt templates) on a fresh
+        install, so the operator sees real text in the UI instead of an empty
+        form, without overwriting anything they have since changed.
+
+        Args:
+            key: Setting key.
+            value: Pydantic model to store when the key is absent.
+
+        Returns:
+            True if the value was written, False if the key already existed.
+        """
+        cursor = await self._conn.execute(
+            """
+            INSERT INTO settings (key, value, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO NOTHING
+            """,
+            (key, value.model_dump_json()),
+        )
+        await self._conn.commit()
+        return cursor.rowcount > 0
 
     async def delete(self, key: str) -> bool:
         """Delete setting by key.
