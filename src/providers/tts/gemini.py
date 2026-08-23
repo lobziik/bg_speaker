@@ -72,6 +72,19 @@ DEFAULT_STYLE_PROMPT = (
     "measured pace, rich intonation, a hint of theatrical relish"
 )
 
+# Appended to whatever the operator wrote, and deliberately not editable in
+# settings. Gemini TTS is a *generative* model, so a style prompt phrased as an
+# instruction to produce text ("Transform the user's message into concise
+# narrative prose...") is obeyed literally: it improvises, reads the direction
+# itself aloud in the direction's own language, and ignores the payload. That
+# reached production once - a 71-character Russian line came back as 29 seconds
+# of English audio while the subtitles, which come from the LLM, stayed correct.
+# Keeping the guard in code means a persona pasted into the form cannot drop it.
+VERBATIM_GUARD = (
+    "Read the text after the colon aloud verbatim, in the language it is written in. "
+    "Do not translate it, do not rephrase it, do not answer it, and do not add words."
+)
+
 
 class GeminiTTSSettings(StrictModel):
     """Gemini TTS configuration.
@@ -209,6 +222,10 @@ class GeminiTTSProvider:
     def _build_prompt(self, text: str) -> str:
         """Combine the style direction with the text to speak.
 
+        ``VERBATIM_GUARD`` is always appended to the operator's direction, so a
+        style prompt that reads as "generate something" cannot make the model
+        improvise over the payload.
+
         Args:
             text: Text to synthesize.
 
@@ -216,9 +233,8 @@ class GeminiTTSProvider:
             Prompt for the TTS model.
         """
         style = self._settings.style_prompt.strip()
-        if not style:
-            return text
-        return f"{style}: {text}"
+        direction = f"{style} {VERBATIM_GUARD}" if style else VERBATIM_GUARD
+        return f"{direction}: {text}"
 
     @staticmethod
     def _parse_sample_rate(mime_type: str) -> int:
