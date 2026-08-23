@@ -22,6 +22,61 @@ from src.providers.tts.base import TTSProvider
 logger = structlog.get_logger()
 
 
+# A narration is bounded by what the LLM wrote: narrated speech runs at roughly
+# twelve characters per second. A generative TTS provider can leave the text
+# behind entirely - Gemini TTS once returned 655 seconds of audio for an
+# 84-character line, and the worker dutifully waited it out, stalling the queue
+# for eleven minutes. Audio far past the plausible reading time is a runaway, not
+# a narration, so it fails here instead of reaching the overlay.
+SPEECH_CHARS_PER_SECOND = 12.0
+
+# How far past the plausible reading time audio may run before it counts as a
+# runaway. Generous: pauses, slow delivery and short texts all inflate the ratio.
+AUDIO_DURATION_TOLERANCE = 3.0
+
+# Floor for the allowance, so a three-word narration is not judged against a
+# fraction of a second.
+MIN_PLAUSIBLE_AUDIO_SECONDS = 10.0
+
+# Ceiling for the allowance. Nothing the narrator prompt can legitimately produce
+# takes two minutes to read aloud.
+MAX_AUDIO_DURATION_SECONDS = 120.0
+
+
+class AudioLengthError(Exception):
+    """Raised when synthesized audio is implausibly long for the text.
+
+    Signals a TTS provider that generated rather than narrated. The worker
+    treats it like any other pipeline failure: the item fails, the points are
+    refunded, and the queue moves on instead of waiting out the audio.
+
+    Attributes:
+        voice_text: The text that was handed to the TTS provider.
+        duration_ms: Duration of the audio that came back.
+        allowed_ms: Longest duration accepted for this text.
+    """
+
+    def __init__(self, voice_text: str, duration_ms: int, allowed_ms: int) -> None:
+        """Initialize the exception.
+
+        Args:
+            voice_text: The text that was handed to the TTS provider.
+            duration_ms: Duration of the audio that came back.
+            allowed_ms: Longest duration accepted for this text.
+        """
+        self.voice_text = voice_text
+        self.duration_ms = duration_ms
+        self.allowed_ms = allowed_ms
+        super().__init__(
+            f"TTS returned {duration_ms / 1000:.1f}s of audio for {len(voice_text)} "
+            f"characters of text, which allows at most {allowed_ms / 1000:.1f}s. "
+            f"The provider generated speech instead of narrating the text - check "
+            f"that the TTS style prompt directs delivery ('read aloud as...') "
+            f"rather than asking the model to produce text ('transform the "
+            f"message into...')."
+        )
+
+
 class ModerationRejectedError(Exception):
     """Raised when content moderation rejects a user message.
 
@@ -376,6 +431,7 @@ class NarrationPipeline:
 
         # Calculate audio duration (assuming WAV format)
         duration_ms = self._estimate_audio_duration(audio_data)
+        self._reject_runaway_audio(voice_text, duration_ms, request_id)
 
         logger.info(
             "pipeline_complete",
@@ -407,6 +463,41 @@ class NarrationPipeline:
         )
 
         return result, metrics
+
+    @staticmethod
+    def _reject_runaway_audio(voice_text: str, duration_ms: int, request_id: str) -> None:
+        """Fail when the audio is far longer than the text could account for.
+
+        Args:
+            voice_text: Text that was handed to the TTS provider.
+            duration_ms: Duration of the audio that came back.
+            request_id: Request ID for logging.
+
+        Raises:
+            AudioLengthError: If the audio exceeds the allowance for this text.
+        """
+        expected_seconds = len(voice_text) / SPEECH_CHARS_PER_SECOND
+        allowed_seconds = min(
+            max(expected_seconds * AUDIO_DURATION_TOLERANCE, MIN_PLAUSIBLE_AUDIO_SECONDS),
+            MAX_AUDIO_DURATION_SECONDS,
+        )
+        allowed_ms = int(allowed_seconds * 1000)
+
+        if duration_ms <= allowed_ms:
+            return
+
+        logger.error(
+            "pipeline_audio_runaway",
+            request_id=request_id,
+            text_length=len(voice_text),
+            duration_ms=duration_ms,
+            allowed_ms=allowed_ms,
+        )
+        raise AudioLengthError(
+            voice_text=voice_text,
+            duration_ms=duration_ms,
+            allowed_ms=allowed_ms,
+        )
 
     def _estimate_audio_duration(self, audio_data: bytes) -> int:
         """Estimate audio duration from WAV data.

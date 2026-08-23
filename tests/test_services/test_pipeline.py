@@ -7,7 +7,13 @@ import pytest
 from src.models.narration import LanguageCode, NarrationRequest, NarratorStyle
 from src.providers.llm.base import LLMResponse, LLMResponseParseError, ModerationResult
 from src.providers.llm.prompts import PromptSettings
-from src.services.pipeline import ModerationRejectedError, NarrationPipeline, PipelineMetrics
+from src.services.pipeline import (
+    MAX_AUDIO_DURATION_SECONDS,
+    AudioLengthError,
+    ModerationRejectedError,
+    NarrationPipeline,
+    PipelineMetrics,
+)
 
 
 @pytest.fixture
@@ -242,6 +248,119 @@ class TestNarrationPipeline:
 
         # Should be approximately 2000ms
         assert 1900 <= duration <= 2100
+
+
+def _wav_of_seconds(seconds: float) -> bytes:
+    """Build a WAV payload of a given duration.
+
+    Uses a low frame rate so a long clip stays small in memory - only the
+    duration derived from the header matters here.
+
+    Args:
+        seconds: Duration the header should report.
+
+    Returns:
+        WAV bytes of that duration.
+    """
+    import io
+    import wave
+
+    rate = 100
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(b"\x00\x00" * int(rate * seconds))
+
+    return buffer.getvalue()
+
+
+class TestRunawayAudio:
+    """The guard against a TTS provider that generates instead of narrating."""
+
+    async def test_runaway_audio_fails_the_narration(
+        self,
+        pipeline: NarrationPipeline,
+        mock_tts_provider: MagicMock,
+    ) -> None:
+        """655 seconds of audio for one short line is rejected, not played.
+
+        This is the regression: the worker waited out such a clip and stalled
+        the queue for eleven minutes.
+        """
+        mock_tts_provider.synthesize = AsyncMock(return_value=_wav_of_seconds(655))
+
+        with pytest.raises(AudioLengthError) as excinfo:
+            await pipeline.process(
+                NarrationRequest(user="kachnamalir2", message="ттс перестал сочинять"),
+                enable_moderation=False,
+            )
+
+        assert excinfo.value.duration_ms == pytest.approx(655_000, abs=100)
+        assert "style prompt" in str(excinfo.value)
+
+    async def test_plausible_audio_passes(
+        self,
+        pipeline: NarrationPipeline,
+        mock_tts_provider: MagicMock,
+    ) -> None:
+        """Audio in proportion with the text is left alone."""
+        # The mock LLM returns 44 characters, so ~3.7s of speech is expected.
+        mock_tts_provider.synthesize = AsyncMock(return_value=_wav_of_seconds(5))
+
+        result, _ = await pipeline.process(
+            NarrationRequest(user="tester", message="hi"), enable_moderation=False
+        )
+
+        assert result.duration_ms == pytest.approx(5_000, abs=100)
+
+    async def test_short_text_gets_the_floor_allowance(
+        self,
+        pipeline: NarrationPipeline,
+        mock_llm_provider: MagicMock,
+        mock_tts_provider: MagicMock,
+    ) -> None:
+        """A three-word narration is judged against the floor, not a fraction of a second."""
+        mock_llm_provider.generate = AsyncMock(
+            return_value=LLMResponse(
+                voice_text="Тьма сгущается.",
+                subtitle_text="Тьма сгущается.",
+                raw_response="{}",
+            )
+        )
+        # 15 characters expects ~1.25s; the floor allows 10s regardless.
+        mock_tts_provider.synthesize = AsyncMock(return_value=_wav_of_seconds(9))
+
+        result, _ = await pipeline.process(
+            NarrationRequest(user="tester", message="hi"), enable_moderation=False
+        )
+
+        assert result.duration_ms == pytest.approx(9_000, abs=100)
+
+    async def test_long_text_is_still_capped(
+        self,
+        pipeline: NarrationPipeline,
+        mock_llm_provider: MagicMock,
+        mock_tts_provider: MagicMock,
+    ) -> None:
+        """The tolerance never lifts the allowance past the absolute ceiling."""
+        # 6000 characters would expect 500s of speech, and x3 tolerance would
+        # allow 1500s - the ceiling holds it to 120s.
+        long_text = "a" * 6000
+        mock_llm_provider.generate = AsyncMock(
+            return_value=LLMResponse(
+                voice_text=long_text, subtitle_text=long_text, raw_response="{}"
+            )
+        )
+        mock_tts_provider.synthesize = AsyncMock(return_value=_wav_of_seconds(200))
+
+        with pytest.raises(AudioLengthError) as excinfo:
+            await pipeline.process(
+                NarrationRequest(user="tester", message="hi"), enable_moderation=False
+            )
+
+        assert excinfo.value.allowed_ms == int(MAX_AUDIO_DURATION_SECONDS * 1000)
 
 
 class TestPipelineMetrics:

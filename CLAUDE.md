@@ -199,6 +199,17 @@ Voice models (~60-100MB each) are automatically unloaded after inactivity to red
 - `global_cooldown.py`: Global Twitch reward cooldown (pauses reward after each narration)
 - `worker.py`: Background queue processor that runs pipeline and broadcasts via WebSocket
 
+### Audio Length Is Bounded, And The Worker Blocks On Playback
+`_broadcast_narration()` sleeps for the audio's full duration before the worker takes the next
+item, so one runaway synthesis stalls the whole queue for as long as it plays. That happened: a
+generative TTS style prompt produced 655 seconds of audio for an 84-character line and the queue
+sat for eleven minutes.
+
+- `NarrationPipeline._reject_runaway_audio()` fails such a narration with `AudioLengthError` before
+  it reaches the overlay. The allowance is `len(voice_text) / SPEECH_CHARS_PER_SECOND`, times
+  `AUDIO_DURATION_TOLERANCE`, clamped between `MIN_PLAUSIBLE_AUDIO_SECONDS` and
+  `MAX_AUDIO_DURATION_SECONDS`. The worker's generic failure path refunds the points.
+
 ### Twitch Service Initialization
 Twitch services (EventSub + RewardController) are initialized in two scenarios:
 1. **At app startup**: If OAuth tokens exist in DB, auto-connects to Twitch
