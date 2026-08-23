@@ -458,12 +458,23 @@ cmd_start() {
 
     # --health-cmd is set here rather than in the image: the OCI image format
     # buildah produces drops Dockerfile HEALTHCHECK instructions.
+    #
+    # --network host rather than -p 80:80 -p 443:443. Published ports put the
+    # container on a bridge, so inbound packets are DNAT'd and then have to
+    # cross the FORWARD chain - and the stock Oracle Cloud ruleset ends FORWARD
+    # in a blanket "REJECT --reject-with icmp-host-prohibited". Opening INPUT,
+    # which is all `install` does and all the VCN rules cover, does not help
+    # there: the packet is rejected one chain later, so the port looks open from
+    # every angle and the traffic still never arrives. Host networking drops the
+    # bridge hop entirely - Caddy binds the host's own 80 and 443, and INPUT is
+    # the only chain in the path. The cost is that the app's 127.0.0.1:8000 is
+    # now the *host's* loopback, so anything on the machine can reach the
+    # dashboard without going through Caddy.
     $RUNTIME run -d \
         --name "$CONTAINER_NAME" \
         --hostname "$CONTAINER_NAME" \
         --systemd always \
-        -p 80:80 \
-        -p 443:443 \
+        --network host \
         --env-file "$CONFIG_DIR/env" \
         -v "$DATA_VOLUME":/var/lib/narrator \
         -v "$CADDY_VOLUME":/var/lib/caddy \
@@ -643,6 +654,26 @@ cmd_doctor() {
         fi
     done
 
+    # --- container networking -------------------------------------------------
+    # The failure this catches is invisible from every other angle: on a bridge
+    # network the ports are bound, INPUT accepts, DNS resolves - and the packet
+    # is rejected one chain later, in FORWARD.
+    local netmode
+    netmode=$($RUNTIME inspect "$CONTAINER_NAME" \
+        --format '{{.HostConfig.NetworkMode}}' 2>/dev/null || echo "unknown")
+
+    if [[ "$netmode" == "host" ]]; then
+        check_mark ok "Container uses host networking"
+    elif iptables -C FORWARD -j REJECT --reject-with icmp-host-prohibited &>/dev/null; then
+        check_mark fail "Container is on '$netmode' networking and FORWARD ends in REJECT"
+        echo "         Published ports are DNAT'd onto a bridge and the packet is then"
+        echo "         rejected in FORWARD, so opening INPUT changes nothing. Recreate"
+        echo "         the container with host networking: ./narrator restart"
+        failures=$((failures + 1))
+    else
+        check_mark warn "Container uses '$netmode' networking rather than host"
+    fi
+
     # --- host firewall --------------------------------------------------------
     local firewall_name
     firewall_name=$(detect_firewall)
@@ -729,6 +760,9 @@ cmd_install() {
     check_podman_version
     check_port_available 80
     check_port_available 443
+    # Host networking means the app's port is the host's too, so a collision on
+    # 8000 is now fatal rather than invisible inside the container's namespace.
+    check_port_available 8000
     check_firewall
 
     collect_input

@@ -209,11 +209,58 @@ Requirements:
 
 - A DNS A record pointing at the VM - Caddy issues a Let's Encrypt certificate
   automatically on first start.
-- TCP 80 and 443 reachable. On Oracle Cloud that means **both** layers: the VCN
-  security list (or NSG) in the console, and the instance's own iptables. The
-  installer offers to open the host side; the VCN side is console-only. If port
-  80 is blocked, Let's Encrypt reports `Timeout during connect`.
+- TCP 80 and 443 reachable from the internet. On Oracle Cloud that takes rules
+  in two separate places - see [Oracle Cloud specifics](#oracle-cloud-specifics).
+- Ports 80, 443 and 8000 free on the host: the container runs with host
+  networking and binds them directly, rather than through a bridge.
 - Set the Twitch OAuth redirect URL to `https://<your-domain>/auth/callback`.
+
+### Oracle Cloud specifics
+
+This is written for Oracle Cloud's Always Free tier, which is where it runs: an
+Ampere A1 instance costs nothing, and a narrator bot for one channel is idle
+most of the time. That shaped some of the deployment decisions below, and they
+are the reason the setup is not the generic one you would write for a VPS you
+pay for.
+
+**Inbound traffic is filtered twice, and both layers must allow 80 and 443.**
+The VCN security list (or a Network Security Group on the VNIC) lives in the
+console; the instance's own iptables lives on the machine. `./narrator install`
+offers to open the host side. The console side cannot be done from the machine:
+
+```
+Compute -> Instances -> your instance -> Primary VNIC -> Subnet
+  -> Security Lists -> Add Ingress Rules
+```
+
+Two rules, Stateless = No, Source CIDR `0.0.0.0/0`, TCP, ports 80 and 443. If
+the VNIC also carries an NSG, add them there too - the two are enforced
+together, not as alternatives. A blocked port 80 surfaces as Let's Encrypt
+reporting `Timeout during connect (likely firewall problem)`.
+
+**The container runs with `--network host`, not published ports.** Oracle's
+stock iptables ends both `INPUT` and `FORWARD` with a blanket
+`REJECT --reject-with icmp-host-prohibited`. Publishing ports would put the
+container on a bridge, so an inbound packet gets DNAT'd and then has to cross
+`FORWARD` - where that REJECT catches it. Opening `INPUT`, which is what the
+installer and the VCN rules do, is one chain too early: `ss` shows the ports
+bound, `iptables -C INPUT` says they are accepted, and nothing arrives anyway.
+Host networking removes the bridge hop, leaving `INPUT` as the only chain in the
+path.
+
+The trade-off is that the dashboard's `127.0.0.1:8000` is the host's own
+loopback, reachable by anything on the machine without passing through Caddy,
+and that a collision on 80, 443 or 8000 is fatal rather than contained. On a
+single-purpose free instance that is a fair trade. `./narrator doctor` reports
+which networking mode the container is on and flags the bridge-plus-REJECT
+combination by name.
+
+**If you need this done properly, please open an issue.** Host networking is a
+pragmatic fix for one hosting environment, not a considered stance - a bridge
+network with the right `FORWARD` rules, or rootless podman, would be the better
+answer for a setup that is not a free Oracle instance. Nobody has needed it yet,
+so nobody has built it. Say what you are deploying onto and it can be done
+properly.
 
 Day-to-day commands:
 
