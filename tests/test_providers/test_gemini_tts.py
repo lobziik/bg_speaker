@@ -11,6 +11,7 @@ from src.models.narration import LanguageCode
 from src.providers.tts.base import TTSProvider, TTSSettings
 from src.providers.tts.gemini import (
     GEMINI_VOICES,
+    VERBATIM_GUARD,
     GeminiTTSProvider,
     GeminiTTSSettings,
 )
@@ -198,13 +199,34 @@ class TestGeminiTTSPrompt:
             settings=GeminiTTSSettings(style_prompt="Whisper it"),
         )
 
-        assert provider._build_prompt("the door creaks") == "Whisper it: the door creaks"
+        assert (
+            provider._build_prompt("the door creaks")
+            == f"Whisper it {VERBATIM_GUARD}: the door creaks"
+        )
 
-    def test_empty_style_prompt_passes_text_through(self, mock_api_key: SecretStr) -> None:
-        """An empty style direction leaves the text untouched."""
+    def test_empty_style_prompt_still_carries_the_guard(self, mock_api_key: SecretStr) -> None:
+        """An empty style direction leaves the guard as the whole direction."""
         provider = GeminiTTSProvider(
             api_key=mock_api_key,
             settings=GeminiTTSSettings(style_prompt="  "),
         )
 
-        assert provider._build_prompt("the door creaks") == "the door creaks"
+        assert provider._build_prompt("the door creaks") == f"{VERBATIM_GUARD}: the door creaks"
+
+    def test_guard_survives_a_generative_style_prompt(self, mock_api_key: SecretStr) -> None:
+        """A persona that tells the model to *produce* text still gets the guard.
+
+        This is the regression: such a prompt made Gemini TTS improvise, reading
+        the direction aloud in English over a Russian payload.
+        """
+        provider = GeminiTTSProvider(
+            api_key=mock_api_key,
+            settings=GeminiTTSSettings(
+                style_prompt="Transform the user's message into concise narrative prose."
+            ),
+        )
+
+        prompt = provider._build_prompt("Пользователь транслирует мысль.")
+
+        assert VERBATIM_GUARD in prompt
+        assert prompt.endswith(": Пользователь транслирует мысль.")

@@ -144,6 +144,12 @@ previous providers. It also creates and starts the worker if it does not exist y
   (`audio/L16;codec=pcm;rate=24000`) and never assumed, then wrapped in a WAV container.
 - Gemini TTS has no speed/pitch knobs, so `update_settings()` raises `NotImplementedError` and a
   non-default `TTSSettings` is rejected - delivery is directed by `style_prompt` instead.
+- `style_prompt` must read as *how to speak*, never as *what to produce*. Gemini TTS is a
+  generative model: given "Transform the user's message into concise narrative prose" it improvises,
+  speaking the direction itself aloud in the direction's own language and ignoring the payload -
+  while the subtitles, which come from the LLM, stay correct, so the overlay looks fine and only the
+  audio is wrong. `VERBATIM_GUARD` is appended to the operator's direction in `_build_prompt()` and
+  is deliberately not editable in settings; do not make it configurable.
 
 ### Prompt Templates
 Nothing about the narration or moderation prompt is hardcoded at runtime. The texts in
