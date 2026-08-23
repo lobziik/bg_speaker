@@ -314,6 +314,18 @@ that REJECT never matches, so it is inserted above it - but the VCN side can onl
 console. A blocked port 80 shows up as Let's Encrypt reporting
 `Timeout during connect (likely firewall problem)`.
 
+That stock ruleset ends *two* chains in a blanket REJECT, and the second one is why the container
+runs with `--network host` instead of `-p 80:80 -p 443:443`. Published ports put it on a bridge, so
+an inbound packet is DNAT'd and then has to cross FORWARD - where Oracle's REJECT catches it. The
+INPUT rules `install` adds, and the VCN rules, are both one chain too early: `ss` shows the ports
+bound, `iptables -C INPUT` says they are accepted, and nothing arrives. Host networking removes the
+bridge hop, so INPUT is the only chain in the path. Consequences to keep in mind: the app's
+`127.0.0.1:8000` is now the host's loopback rather than a private namespace, and a collision on 80,
+443 or 8000 is fatal - `install` pre-flights all three.
+
+This is a fix for one hosting environment, not a general position - the README says so and asks
+anyone deploying elsewhere to open an issue rather than assume it is the intended design.
+
 Gotchas that are easy to reintroduce:
 
 - systemd does not inherit the container environment. Every variable `narrator-init.sh` reads must
