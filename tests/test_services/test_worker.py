@@ -10,6 +10,7 @@ import pytest_asyncio
 
 from src.api.websocket import WebSocketManager
 from src.db.manager import DatabaseManager
+from src.db.repositories.narration_log import NarrationLogRepository
 from src.db.repositories.settings import SettingsRepository
 from src.models.narration import LanguageCode, NarrationRequest, NarrationResult
 from src.models.settings import LanguageSettings, QueueSettings, TTSVoiceSettings
@@ -535,6 +536,74 @@ class TestWorkerPipelineSwap:
         await worker.stop()
 
         assert elapsed < 1.0, f"swap waited {elapsed:.1f}s for playback to finish"
+
+
+class TestHistoryTiming:
+    """When a finished narration reaches the history."""
+
+    @pytest_asyncio.fixture
+    async def db(self, tmp_path: Path) -> AsyncIterator[DatabaseManager]:
+        """An initialized database for the narration history."""
+        manager = DatabaseManager(db_path=tmp_path / "data" / "narrator.db")
+        await manager.initialize()
+        try:
+            yield manager
+        finally:
+            await manager.close()
+
+    @pytest.mark.asyncio
+    async def test_success_is_logged_before_playback_finishes(
+        self,
+        db: DatabaseManager,
+        queue: NarrationQueue,
+        mock_pipeline: MagicMock,
+        mock_ws_manager: MagicMock,
+    ) -> None:
+        """The history row appears while the audio is still playing.
+
+        Logging after the broadcast hid every completed narration for the length
+        of its audio, so a failure logged in that window looked like the most
+        recent event - which is exactly how an eleven-minute stall read in the UI.
+        """
+        finished, metrics = mock_pipeline.process.return_value
+        playing = NarrationResult(
+            id=finished.id,
+            user=finished.user,
+            voice_text=finished.voice_text,
+            subtitle_text=finished.subtitle_text,
+            target_lang=finished.target_lang,
+            audio_data=finished.audio_data,
+            duration_ms=5000,
+        )
+        mock_pipeline.process = AsyncMock(return_value=(playing, metrics))
+        mock_pipeline.llm_provider_name = "gemini"
+        mock_pipeline.tts_provider_name = "gemini"
+
+        worker = QueueWorker(
+            queue=queue,
+            pipeline=mock_pipeline,
+            ws_manager=mock_ws_manager,
+            db_connection=db.connection,
+        )
+        log_repo = NarrationLogRepository(db.connection)
+
+        await worker.start()
+        await queue.add(user="TestUser", message="A long one")
+
+        # Wait until the audio has gone out, which is where the worker then
+        # sleeps for the full five seconds.
+        for _ in range(50):
+            if mock_ws_manager.broadcast_audio_data.await_count:
+                break
+            await asyncio.sleep(0.02)
+
+        entries = await log_repo.get_recent(limit=5)
+        await worker.stop()
+
+        assert mock_ws_manager.broadcast_narration_end.await_count == 0, (
+            "playback should still be in progress"
+        )
+        assert [entry.status for entry in entries] == ["success"]
 
 
 class TestVoiceOverrideScoping:
