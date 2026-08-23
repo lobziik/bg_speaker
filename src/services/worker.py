@@ -242,13 +242,11 @@ class QueueWorker:
                     prompts=prompts,
                 )
 
-            # Broadcast to WebSocket clients
-            await self._broadcast_narration(result)
-
-            # Mark completed in queue
-            await self._queue.mark_completed(item)
-
-            # Log successful narration
+            # Log before broadcasting: the narration is finished as far as this
+            # worker is concerned, and broadcasting blocks for the length of the
+            # audio. Logging afterwards hid completed items from the history for
+            # as long as they played, so a failure logged during that window
+            # looked like the most recent thing that happened.
             await self._log_narration(
                 item=item,
                 result=result,
@@ -262,6 +260,12 @@ class QueueWorker:
                 llm_provider=llm_provider_name,
                 tts_provider=tts_provider_name,
             )
+
+            # Broadcast to WebSocket clients
+            await self._broadcast_narration(result)
+
+            # Mark completed in queue
+            await self._queue.mark_completed(item)
 
             # Fulfill Twitch redemption if applicable
             if item.redemption_id and self._rewards:

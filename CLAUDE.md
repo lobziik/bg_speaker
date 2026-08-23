@@ -209,6 +209,9 @@ sat for eleven minutes.
   it reaches the overlay. The allowance is `len(voice_text) / SPEECH_CHARS_PER_SECOND`, times
   `AUDIO_DURATION_TOLERANCE`, clamped between `MIN_PLAUSIBLE_AUDIO_SECONDS` and
   `MAX_AUDIO_DURATION_SECONDS`. The worker's generic failure path refunds the points.
+- The success row is written to `narration_log` *before* broadcasting, not after. Logging after the
+  sleep hid finished narrations from the history for the length of their audio, which made a
+  failure logged during that window look like the most recent event.
 
 ### Twitch Service Initialization
 Twitch services (EventSub + RewardController) are initialized in two scenarios:
